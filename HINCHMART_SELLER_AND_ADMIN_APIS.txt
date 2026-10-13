@@ -1,0 +1,321 @@
+================================================================================
+HINCHMART B2B MARKETPLACE - SELLER & ADMIN MODERATION API SPECIFICATION
+================================================================================
+Base URL: https://api.hinchmart.com
+Authentication: Bearer <JWT_TOKEN>
+Content-Type: application/json
+
+--------------------------------------------------------------------------------
+LIVE PENDING SELLER REGISTRATION READY FOR ADMIN APPROVAL
+--------------------------------------------------------------------------------
+Seller Account 1 (Latest Registered):
+- Seller ID: 16 (MySQL User ID: 109, Firebase UID: 1teiHp6etGWaWbiYIEHNJd79WC42)
+- Name: Rajesh Kumar Reddy
+- Email: rajesh.apex7971@hinchmart.com
+- Password: Password@123
+- Phone: 9848054013
+- Company: Apex Infra & Building Supplies Pvt Ltd
+- Business Type: MANUFACTURER
+- PAN: AABCA7971K
+- Aadhaar: 882134983500
+- GSTIN: 36AABCA7971K1Z8
+- Address: Plot 108, Phase 2, Industrial Development Area, Nacharam, Hyderabad, Telangana - 500076
+- Bank: State Bank of India
+  Account Holder: Rajesh Kumar Reddy
+  Account Number: 620145887971
+  IFSC: SBIN0020145
+- Onboarding Status: PENDING_REVIEW (All 5 steps submitted)
+- Verification Status: PENDING
+
+Pending Product under Seller 16:
+- Product ID: 833 (sp_833)
+  Title: UltraTech Super Cement OPC 53 Grade (50kg Bag)
+  Status: PENDING
+  SKU: SKU-CEM-OPC53-7971
+  Price: Rs. 395.00 | MRP: Rs. 440.00 | Stock: 800 units | MOQ: 20
+  Category: Home Cleaning Supplies / Construction Materials (ID: 73)
+  Brand: CleanPro / UltraTech (ID: 288)
+
+--------------------------------------------------------------------------------
+Seller Account 2 (Previous):
+- Seller ID: 14 (MySQL User ID: 108)
+- Name: Vignesh Kilay
+- Email: vignesh.seller7626@hinchmart.com
+- Password: Password@123
+- Phone: 9866953818
+- Company: CleanPro Industrial Solutions LLP
+- KYC Status: PENDING_REVIEW
+- Pending Products: Product 831, Product 832
+
+
+================================================================================
+1. ADMIN PRODUCT MODERATION & APPROVAL APIS (FOR ADMIN)
+================================================================================
+
+1.1 List All Pending Products for Review
+--------------------------------------------------------------------------------
+Method: GET
+URL: https://api.hinchmart.com/api/admin/products/pending
+(or GET /api/admin/products?status=PENDING)
+Headers:
+  Authorization: Bearer <ADMIN_JWT_TOKEN>
+
+Expected Response (200 OK):
+{
+  "success": true,
+  "data": [
+    {
+      "productId": 833,
+      "sellerId": 16,
+      "sellerName": "Rajesh Kumar Reddy",
+      "title": "UltraTech Super Cement OPC 53 Grade (50kg Bag)",
+      "sku": "SKU-CEM-OPC53-7971",
+      "price": 395.00,
+      "mrp": 440.00,
+      "stockQty": 800,
+      "status": "PENDING"
+    }
+  ]
+}
+
+1.2 Approve Seller Product (Make Product Live on Public Catalog)
+--------------------------------------------------------------------------------
+Method: PUT (or PATCH)
+URL: https://api.hinchmart.com/api/admin/products/{productId}/approve
+Example: https://api.hinchmart.com/api/admin/products/833/approve
+Headers:
+  Authorization: Bearer <ADMIN_JWT_TOKEN>
+  Content-Type: application/json
+
+Request Body:
+{
+  "status": "APPROVED",
+  "comment": "Product verified and approved for marketplace catalog."
+}
+
+Expected Response (200 OK):
+{
+  "success": true,
+  "message": "Product 833 has been approved and published to catalog.",
+  "data": {
+    "productId": 833,
+    "status": "APPROVED",
+    "active": true
+  }
+}
+
+1.3 Reject Seller Product
+--------------------------------------------------------------------------------
+Method: PUT
+URL: https://api.hinchmart.com/api/admin/products/{productId}/reject
+Example: https://api.hinchmart.com/api/admin/products/833/reject
+Headers:
+  Authorization: Bearer <ADMIN_JWT_TOKEN>
+  Content-Type: application/json
+
+Request Body:
+{
+  "status": "REJECTED",
+  "rejectionReason": "Please provide clearer high-resolution product images."
+}
+
+
+================================================================================
+2. ADMIN SELLER KYC & ACCOUNT APPROVAL APIS
+================================================================================
+
+2.1 Verify KYC Document
+--------------------------------------------------------------------------------
+Method: PUT
+URL: https://api.hinchmart.com/api/seller/onboarding/{sellerId}/documents/{documentType}/verify
+Example: https://api.hinchmart.com/api/seller/onboarding/16/documents/PAN_CARD/verify
+Headers:
+  Authorization: Bearer <ADMIN_JWT_TOKEN>
+  Content-Type: application/json
+
+Document Types: PAN_CARD, GST_CERTIFICATE, BANK_STATEMENT, BUSINESS_REGISTRATION
+
+Request Body:
+{
+  "status": "VERIFIED",
+  "rejectionReason": null
+}
+
+2.2 Final Seller Account Approval & Store Activation
+--------------------------------------------------------------------------------
+Method: PUT
+URL: https://api.hinchmart.com/api/admin/sellers/{sellerId}/approve
+Example: https://api.hinchmart.com/api/admin/sellers/16/approve
+Headers:
+  Authorization: Bearer <ADMIN_JWT_TOKEN>
+  Content-Type: application/json
+
+Request Body:
+{
+  "status": "VERIFIED",
+  "accountStatus": "ACTIVE"
+}
+
+
+================================================================================
+3. SELLER PRODUCT MANAGEMENT APIS (USED BY SELLER PORTAL)
+================================================================================
+
+3.1 List Seller's Own Products
+--------------------------------------------------------------------------------
+Method: GET
+URL: https://api.hinchmart.com/api/seller/products?page=1&limit=20&status=ALL
+Headers:
+  Authorization: Bearer <SELLER_JWT_TOKEN>
+
+Expected Response (200 OK):
+{
+  "success": true,
+  "total": 1,
+  "page": 1,
+  "limit": 20,
+  "data": [
+    {
+      "productId": 833,
+      "title": "UltraTech Super Cement OPC 53 Grade (50kg Bag)",
+      "sku": "SKU-CEM-OPC53-7971",
+      "price": 395.00,
+      "sellingPrice": 395.00,
+      "mrp": 440.00,
+      "stockQty": 800,
+      "moq": 20,
+      "unit": "BAG",
+      "status": "PENDING"
+    }
+  ]
+}
+
+3.2 Create New Seller Product
+--------------------------------------------------------------------------------
+Method: POST
+URL: https://api.hinchmart.com/api/seller/products
+Headers:
+  Authorization: Bearer <SELLER_JWT_TOKEN>
+  Content-Type: application/json
+
+Request Body:
+{
+  "sellerId": 16,
+  "storeId": 1,
+  "title": "UltraTech Super Cement OPC 53 Grade (50kg Bag)",
+  "sku": "SKU-CEM-OPC53-7971",
+  "description": "Premium high-strength Portland cement for heavy RCC construction and foundations.",
+  "categoryId": 73,
+  "subcategoryId": 119,
+  "brandId": 288,
+  "price": 395.00,
+  "sellingPrice": 395.00,
+  "mrp": 440.00,
+  "unit": "BAG",
+  "moq": 20,
+  "stockQty": 800,
+  "gstRate": 28,
+  "is24HourDelivery": true,
+  "images": [
+    "https://hinchmart-storage-191481838776-ap-south-2-an.s3.ap-south-2.amazonaws.com/categories/cb0fa7c0-ef0e-465e-b420-e16eb82c84d0.jpg"
+  ]
+}
+
+3.3 Update Seller Product
+--------------------------------------------------------------------------------
+Method: PUT
+URL: https://api.hinchmart.com/api/seller/products/{productId}
+Example: https://api.hinchmart.com/api/seller/products/833
+Headers:
+  Authorization: Bearer <SELLER_JWT_TOKEN>
+  Content-Type: application/json
+
+Request Body:
+{
+  "title": "UltraTech Super Cement OPC 53 Grade (50kg Bag) - Updated",
+  "price": 390.00,
+  "sellingPrice": 390.00,
+  "stockQty": 900,
+  "moq": 20
+}
+
+3.4 Quick Stock & Price Update
+--------------------------------------------------------------------------------
+Method: PATCH
+URL: https://api.hinchmart.com/api/seller/products/{productId}/quick-update
+Example: https://api.hinchmart.com/api/seller/products/833/quick-update
+Headers:
+  Authorization: Bearer <SELLER_JWT_TOKEN>
+  Content-Type: application/json
+
+Request Body:
+{
+  "stockQty": 850,
+  "price": 392.00
+}
+
+3.5 Delete / Archive Product
+--------------------------------------------------------------------------------
+Method: DELETE
+URL: https://api.hinchmart.com/api/seller/products/{productId}
+Example: https://api.hinchmart.com/api/seller/products/833
+Headers:
+  Authorization: Bearer <SELLER_JWT_TOKEN>
+
+
+================================================================================
+4. SELLER STORE & PROFILE APIS
+================================================================================
+
+4.1 Get Store Profile
+--------------------------------------------------------------------------------
+Method: GET
+URL: https://api.hinchmart.com/api/seller/store
+Headers:
+  Authorization: Bearer <SELLER_JWT_TOKEN>
+
+4.2 Update Store Profile
+--------------------------------------------------------------------------------
+Method: PUT
+URL: https://api.hinchmart.com/api/seller/store
+Headers:
+  Authorization: Bearer <SELLER_JWT_TOKEN>
+  Content-Type: application/json
+
+Request Body:
+{
+  "name": "Apex Infra Depot",
+  "logoUrl": "https://images.unsplash.com/photo-1581578731548-c64695cc6952",
+  "bannerUrl": "https://images.unsplash.com/photo-1581578731548-c64695cc6952",
+  "description": "Premier supplier and distributor of industrial building supplies and hardware.",
+  "minOrderValue": 500.0,
+  "serviceRadiusKm": 25
+}
+
+
+================================================================================
+5. ORDERS & FULFILLMENT APIS
+================================================================================
+
+5.1 List Seller Orders
+--------------------------------------------------------------------------------
+Method: GET
+URL: https://api.hinchmart.com/api/orders?status=CONFIRMED&page=1&limit=20
+(or GET /api/seller/orders)
+Headers:
+  Authorization: Bearer <SELLER_JWT_TOKEN>
+
+5.2 Update Order Status
+--------------------------------------------------------------------------------
+Method: PATCH
+URL: https://api.hinchmart.com/api/orders/{orderId}/status
+Headers:
+  Authorization: Bearer <SELLER_JWT_TOKEN>
+  Content-Type: application/json
+
+Request Body:
+{
+  "status": "PROCESSING"
+}
+Allowed Status Transitions: CONFIRMED -> PROCESSING -> SHIPPED -> DELIVERED
+================================================================================

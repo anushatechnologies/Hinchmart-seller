@@ -1,0 +1,89 @@
+================================================================================
+HINCHMART BACKEND API ISSUE REPORT - 403 FORBIDDEN ON SELLER ENDPOINTS
+================================================================================
+Generated Date : September 12, 2026
+Target Backend : https://api.hinchmart.com
+Service        : Spring Boot / Spring Security / MySQL
+
+--------------------------------------------------------------------------------
+1. SUMMARY OF THE ISSUE
+--------------------------------------------------------------------------------
+When a seller registers and logs in via Firebase Authentication and makes API calls 
+to the `/api/seller/*` endpoints with their valid Firebase Bearer JWT token, 
+the Spring Boot backend rejects the requests with:
+
+   HTTP 403 Forbidden
+
+Impacted Endpoints:
+1. GET  /api/seller/enquiries
+2. GET  /api/seller/warehouses
+3. GET  /api/seller/products (and GET /api/seller/products?page=1&limit=50)
+4. GET  /api/seller/documents
+5. POST /api/seller/warehouses
+6. POST /api/seller/pricing/bulk-adjust
+
+--------------------------------------------------------------------------------
+2. ROOT CAUSE IN SPRING BOOT / SPRING SECURITY
+--------------------------------------------------------------------------------
+1. Role-Based Access Control (@PreAuthorize):
+   - In the Spring Boot controller layer, `/api/seller/**` routes are annotated with:
+     @PreAuthorize("hasRole('SELLER')") or @PreAuthorize("hasAuthority('ROLE_SELLER')")
+   
+2. New / Pending Seller Account Role Assignment:
+   - When a seller registers, their user record in MySQL table `users` or `sellers` 
+     has role `CUSTOMER` or onboarding status `PENDING` / `PENDING_REVIEW`.
+   - The Spring Security JWT authentication filter extracts the Firebase UID / email, 
+     loads the user authorities from MySQL, and assigns `ROLE_CUSTOMER` instead of `ROLE_SELLER`.
+   - Because `hasRole('SELLER')` evaluates to false, Spring Security immediately throws 
+     AccessDeniedException, returning `403 Forbidden`.
+
+--------------------------------------------------------------------------------
+3. REQUIRED BACKEND FIXES / ACTION ITEMS
+--------------------------------------------------------------------------------
+
+Option A: Allow Sellers in ONBOARDING/PENDING to Access Basic Seller Setup APIs
+-----------------------------------------------------------------------------
+If sellers who just registered need to view/manage their draft products, warehouses, 
+and documents during onboarding, update Spring Security configuration:
+- In `SecurityConfig.java`:
+  Allow both `ROLE_SELLER` and `ROLE_CUSTOMER` (or authenticated users with a registered seller profile) 
+  to access `/api/seller/**`:
+  
+  .requestMatchers("/api/seller/**").hasAnyRole("SELLER", "PENDING_SELLER")
+
+Option B: Automatically Assign ROLE_SELLER on Seller Registration / Sync
+------------------------------------------------------------------------
+In `/api/auth/sync` and `/api/sellers/onboarding/**`:
+- When a user signs up on the Seller Portal or calls `/api/auth/sync`, ensure the user's role 
+  in the database is updated to `ROLE_SELLER` or their authority set contains `ROLE_SELLER`.
+  
+  Example:
+  User user = userRepository.findByEmail(email);
+  if (user != null && isSellerRegistration) {
+      user.setRole("SELLER");
+      userRepository.save(user);
+  }
+
+Option C: Admin Approval Flow for Seller Accounts
+-------------------------------------------------
+If sellers must be manually approved by Admin before accessing `/api/seller/*`:
+- Admin endpoint: PUT /api/admin/sellers/{sellerId}/approve
+- Upon admin approval, update user role to `ROLE_SELLER` and onboardingStatus to `VERIFIED` in MySQL.
+
+--------------------------------------------------------------------------------
+4. REPRODUCTION DETAILS
+--------------------------------------------------------------------------------
+Request Headers:
+  Authorization: Bearer <FIREBASE_ID_TOKEN>
+  X-Seller-Id: <SELLER_ID>
+  Content-Type: application/json
+
+Sample cURL:
+  curl -X GET "https://api.hinchmart.com/api/seller/products?page=1&limit=50" \
+       -H "Authorization: Bearer <JWT_TOKEN>" \
+       -H "X-Seller-Id: 16" \
+       -H "Accept: application/json"
+
+Expected Response : 200 OK (Product List or empty array [])
+Actual Response   : 403 Forbidden {"status": 403, "error": "Forbidden", "message": "Access Denied"}
+================================================================================

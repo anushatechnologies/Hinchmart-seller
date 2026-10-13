@@ -1,0 +1,168 @@
+================================================================================
+HINCHMART B2B MARKETPLACE: SELLER PORTAL INTEGRATION SUMMARY FOR BACKEND TEAM
+Date: September 9, 2026
+Module: Seller Portal Catalog Management, Image Upload & Product Ingestion Flow
+Target: Backend Engineering Team (Spring Boot / Database Architecture)
+================================================================================
+
+1. EXECUTIVE SUMMARY & SYSTEM STATUS
+--------------------------------------------------------------------------------
+The HinchMart Seller Portal frontend is 100% connected, verified, and active 
+against the live Spring Boot backend (https://api.hinchmart.com).
+
+Every catalog entity created by the seller is dispatched directly to live REST 
+endpoints with authenticated headers and 32-bit Integer relational foreign keys:
+
+  - Current Authenticated Seller ID: '9'
+  - Default Request Header: X-Seller-Id: 9
+  - Token Authorization Header: Bearer <JWT_TOKEN>
+  - Asset Storage: Live AWS S3 Bucket (hinchmart-storage-191481838776-ap-south-2-an)
+
+
+2. BACKEND API ENDPOINTS & PAYLOAD SPECIFICATION
+--------------------------------------------------------------------------------
+
+A. IMAGE UPLOADS
+   - Endpoint: POST /api/images/upload?type={folder}
+   - Content-Type: multipart/form-data
+   - Form Data Fields: `file` (Binary), `folder` (String: products | categories | brands)
+   - Backend Response: 201 Created -> Returns permanent AWS S3 image URL.
+   - Status: Fully working and tested.
+
+B. CATEGORIES
+   - Endpoint: POST /api/categories
+   - Payload:
+     {
+       "name": "Textile Colors & Dyes",
+       "title": "Textile Colors & Dyes",
+       "slug": "textile-colors-dyes",
+       "sortOrder": 10,
+       "displayOrder": 10,
+       "imageUrl": "https://...s3.amazonaws.com/...",
+       "active": true,
+       "sellerId": "9"
+     }
+   - Backend Behavior: Sets `active: true` in DB.
+   - Status: Live and immediately visible in Admin.
+
+C. SUBCATEGORIES
+   - Endpoint: POST /api/subcategories
+   - Payload:
+     {
+       "name": "Pink Textile Colors",
+       "title": "Pink Textile Colors",
+       "categoryId": 69,
+       "categoryName": "Textile Colors & Dyes",
+       "slug": "pink-textile-colors",
+       "sortOrder": 80,
+       "imageUrl": "https://...s3.amazonaws.com/...",
+       "active": true,
+       "sellerId": "9"
+     }
+   - Backend Behavior: Sets `active: true` in DB with parent category relation.
+   - Status: Live and immediately visible in Admin.
+
+D. BRANDS
+   - Endpoint: POST /api/brands
+   - Payload:
+     {
+       "name": "ColorCraft",
+       "brandName": "ColorCraft",
+       "slug": "colorcraft",
+       "categoryId": 69,
+       "categoryName": "Textile Colors & Dyes",
+       "subcategoryId": 115,
+       "subcategoryName": "Pink Textile Colors",
+       "imageUrl": "https://...s3.amazonaws.com/...",
+       "active": true,
+       "sortOrder": 90,
+       "sellerId": "9"
+     }
+   - Backend Behavior: Sets `active: true` in DB.
+   - Status: Live and immediately visible in Admin.
+
+E. PRODUCTS
+   - Endpoint: POST /api/products
+   - Payload:
+     {
+       "title": "ColorCraft Rose Pink Reactive Dye",
+       "name": "ColorCraft Rose Pink Reactive Dye",
+       "slug": "colorcraft-rose-pink-reactive-dye",
+       "sku": "SKU-PINK-001",
+       "description": "Premium industrial grade reactive dye for textile processing.",
+       "categoryId": 69,
+       "categoryName": "Textile Colors & Dyes",
+       "subcategoryId": 115,
+       "subcategoryName": "Pink Textile Colors",
+       "brandId": 275,
+       "brandName": "ColorCraft",
+       "brand": "ColorCraft",
+       "price": 850.0,
+       "sellingPrice": 850.0,
+       "mrp": 977.0,
+       "unit": "KG",
+       "moq": 5,
+       "stock": 100,
+       "stockQty": 100,
+       "hsn": "3204",
+       "hsnCode": "3204",
+       "gstRate": 18,
+       "gst": 18,
+       "is24HourDelivery": false,
+       "imageUrl": "https://...s3.amazonaws.com/...",
+       "images": ["https://...s3.amazonaws.com/..."],
+       "bulkPricingTiers": [],
+       "specifications": {},
+       "active": true,
+       "status": "PENDING",
+       "approvalStatus": "PENDING",
+       "sellerId": "9",
+       "vendorId": "9"
+     }
+   - Backend Response: 201 Created (Saved with ID 790).
+
+
+3. VERIFIED LIVE RECORDS IN BACKEND DATABASE
+--------------------------------------------------------------------------------
+The following real test entities have been successfully created and reside in 
+the live database:
+
+  * Category: "Textile Colors & Dyes"       -> Database ID: 69
+  * Subcategory: "Pink Textile Colors"      -> Database ID: 115
+  * Brand: "ColorCraft"                     -> Database ID: 275
+  * Product: "ColorCraft Rose Pink Reactive Dye" -> Database ID: 790 (SKU: SKU-PINK-001)
+
+
+4. TECHNICAL DISCUSSION & ACTION ITEMS FOR BACKEND TEAM
+--------------------------------------------------------------------------------
+
+Issue: Newly created products are saved in the DB, but do not appear in `GET /api/products` or Admin Search.
+
+Root Cause:
+1. In `POST /api/products`, Spring Boot `ProductService.createProduct` defaults 
+   new products to `active = false` and `status = 'PENDING'`.
+2. The query behind `GET /api/products` uses `WHERE active = true AND status = 'APPROVED'`.
+3. Because newly created products are `active: false`, the SQL query excludes them 
+   from the list returned to the frontend and Admin portal.
+
+Recommended Fixes (Choose Option A or B in Spring Boot):
+
+OPTION A (Recommended for Immediate Publishing):
+In `ProductService.java` (inside `createProduct` method), default:
+  ```java
+  product.setActive(true);
+  product.setStatus("APPROVED");
+  product.setApprovalStatus("APPROVED");
+  ```
+This matches how Categories and Brands behave and allows products to be 
+immediately searchable across the platform.
+
+OPTION B (For Moderated Review Workflow):
+In `ProductController.java` / `ProductRepository.java`:
+Update `GET /api/products` to accept an optional query parameter:
+`GET /api/products?includeInactive=true` or `GET /api/products?status=PENDING`
+so the Admin portal can fetch and review pending submissions.
+
+================================================================================
+Report prepared by Seller Portal Frontend Engineering Team.
+================================================================================

@@ -1,0 +1,160 @@
+================================================================================
+HINCHMART B2B MARKETPLACE: HOW THE SELLER PORTAL WORKS (FUNCTIONAL & SYSTEM FLOW)
+================================================================================
+Date: September 9, 2026
+Topic: Complete End-to-End Working Explanation of the Seller Portal
+Target: Backend Team, Product Team, and Stakeholders
+================================================================================
+
+1. WHAT IS HINCHMART SELLER PORTAL?
+--------------------------------------------------------------------------------
+The HinchMart Seller Portal is a dedicated web platform for B2B manufacturers, 
+distributors, and suppliers to manage their entire B2B wholesale business:
+  - Onboarding and Seller Profile management
+  - Creating and organizing Categories, Subcategories, and Brands
+  - Uploading product media directly to AWS S3 Cloud Storage
+  - Adding B2B products with Bulk Pricing, MOQ, Stock, HSN, and GST
+  - Tracking approval status from Admin
+  - Managing live inventory, orders, and logistics
+
+
+================================================================================
+2. HOW IT WORKS (STEP-BY-STEP WORKFLOW)
+================================================================================
+
+--------------------------------------------------------------------------------
+PHASE 1: SELLER LOGIN & ISOLATED WORKSPACE
+--------------------------------------------------------------------------------
+1. How Seller Accesses the Portal:
+   - Seller logs in with their registered phone number / email / OTP.
+   - The system authenticates the seller and assigns their unique `sellerId` (e.g., '9').
+   - Every request made by this seller automatically includes their Auth Token 
+     and `X-Seller-Id: 9` header.
+
+2. How Seller Data Isolation Works:
+   - The seller has their own private catalog workspace.
+   - The seller ONLY sees categories, brands, and products created by or assigned 
+     to their seller account.
+   - They do not see other sellers' private data.
+
+
+--------------------------------------------------------------------------------
+PHASE 2: 3-TIER CATALOG SETUP (CATEGORY -> SUBCATEGORY -> BRAND)
+--------------------------------------------------------------------------------
+Before adding products, the platform organizes items in a structured 3-tier hierarchy:
+
+1. Step 1: Category Setup (Level 1)
+   - Seller clicks "Add Category" (e.g., "Textile Colors & Dyes").
+   - Seller enters Name, Slug, Description, and uploads a Banner Image.
+   - System saves it to the backend (`POST /api/categories`).
+   - If the category name already exists on the marketplace, the system automatically
+     links the existing category so no duplicates are created.
+
+2. Step 2: Subcategory Setup (Level 2)
+   - Seller clicks "Add Subcategory" (e.g., "Pink Textile Colors").
+   - Seller selects the parent category ("Textile Colors & Dyes").
+   - System links the subcategory under that parent category (`POST /api/subcategories`).
+
+3. Step 3: Brand Setup (Level 3)
+   - Seller clicks "Add Brand" (e.g., "ColorCraft").
+   - Seller links the Brand to the Category and Subcategory.
+   - Seller uploads the Brand Logo.
+   - System registers the brand on the backend (`POST /api/brands`).
+
+
+--------------------------------------------------------------------------------
+PHASE 3: HOW IMAGE UPLOADING WORKS (AWS S3)
+--------------------------------------------------------------------------------
+1. Seller selects or drags an image file (PNG, JPG, WEBP).
+2. The frontend validates the file (max 5MB).
+3. The image is sent directly to the live AWS S3 upload service:
+   `POST /api/images/upload?type=products`
+4. AWS S3 generates a permanent, secure HTTPS image URL:
+   `https://hinchmart-storage-191481838776-ap-south-2-an.s3.ap-south-2.amazonaws.com/products/xxx.png`
+5. This S3 image URL is automatically attached to the product listing.
+
+
+--------------------------------------------------------------------------------
+PHASE 4: HOW ADDING A PRODUCT WORKS (SELLER FORM FLOW)
+--------------------------------------------------------------------------------
+When a seller clicks "Add New Marketplace Product":
+
+1. Select Hierarchy:
+   - Selects Category (e.g., "Textile Colors & Dyes")
+   - Subcategory dropdown automatically updates to show subcategories under that category.
+   - Seller selects Subcategory (e.g., "Pink Textile Colors").
+   - Brand dropdown updates -> Seller selects Brand (e.g., "ColorCraft").
+
+2. Enter Product Identity:
+   - Product Title: e.g. "ColorCraft Rose Pink Reactive Dye"
+   - SEO URL Slug: auto-generated (e.g. "colorcraft-rose-pink-reactive-dye")
+   - SKU Code: auto-generated or custom (e.g. "SKU-PINK-001")
+
+3. Enter Commercial & B2B Wholesale Details:
+   - Selling Price: e.g. Rs 850.00 per unit
+   - MRP: auto-suggested or custom (e.g. Rs 977.00)
+   - Unit of Measurement: e.g. "KG", "PIECE", "COIL", "BOX"
+   - Minimum Order Quantity (MOQ): e.g. 5 (Wholesale requirement)
+   - Stock Quantity: e.g. 100
+   - HSN Code: e.g. "3204" (GST Tax Code)
+   - GST Rate: e.g. 18% (Parsed as integer 18)
+   - 24-Hour Express Logistics: checkbox toggle
+
+4. Attach Images & Specifications:
+   - Product image uploaded to S3 is attached as primary photo.
+   - Technical description (grade, specifications, usage instructions).
+
+5. Submit to Backend:
+   - Form validates all fields and sends `POST /api/products`.
+   - Backend creates the record with a unique database Product ID (e.g. 790).
+
+
+--------------------------------------------------------------------------------
+PHASE 5: APPROVAL & MARKETPLACE PUBLISHING LIFECYCLE
+--------------------------------------------------------------------------------
+How the product moves from Seller to Buyer Storefront:
+
+  [1. SELLER CREATION]
+       |
+       v
+  Seller submits product -> Saved to database with `status: 'PENDING'`.
+       |
+       v
+  [2. SELLER PORTAL VIEW]
+       |
+       v
+  Product appears in Seller's Dashboard under "Pending Approval Review".
+  Seller can view, edit price, or adjust stock anytime.
+       |
+       v
+  [3. ADMIN REVIEW & MODERATION]
+       |
+       v
+  Admin opens Admin Portal -> Reviews product details, pricing, and image.
+  Admin clicks "Approve".
+       |
+       v
+  [4. LIVE MARKETPLACE STOREFRONT]
+       |
+       v
+  Status becomes `APPROVED` and `active: true`.
+  Product is now visible to all B2B buyers on HinchMart marketplace.
+  Buyers can search, add to cart, and place bulk wholesale orders.
+
+
+--------------------------------------------------------------------------------
+PHASE 6: INVENTORY, PRICING & ORDER MANAGEMENT
+--------------------------------------------------------------------------------
+Once products are in the system, the seller can:
+  - Quick Stock Update: Adjust available inventory directly from the table.
+  - Price Adjustment: Update standard price and bulk discount tiers.
+  - Active/Inactive Toggle: Temporarily pause listings if out of stock.
+  - Delete/Archive: Remove discontinued products from their active inventory.
+
+================================================================================
+Summary:
+1. Seller creates Category -> Subcategory -> Brand -> Product.
+2. Images upload directly to AWS S3.
+3. Products are saved to DB with `PENDING` status.
+4. Admin approves -> Product goes LIVE on buyer marketplace.
+================================================================================

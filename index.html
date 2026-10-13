@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>HinchMart Seller Portal — B2B Construction Materials Marketplace</title>
+    <meta name="description" content="Enterprise B2B Construction Materials Commerce Portal for Manufacturers, Distributors, Wholesalers, and Suppliers." />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+    <script>
+      // Filter out third-party Chrome extension / web-vitals background script errors (e.g. reportAllChanges / startTime)
+      window.addEventListener('error', function(e) {
+        if (
+          (e.message && (e.message.includes('startTime') || e.message.includes('reportAllChanges') || e.message.includes('ResizeObserver'))) ||
+          (e.filename && (e.filename.includes('extension') || e.filename.startsWith('chrome-extension://') || e.filename.includes('VM'))) ||
+          !e.filename
+        ) {
+          e.preventDefault();
+          e.stopImmediatePropagation();
+        }
+      }, true);
+      window.addEventListener('unhandledrejection', function(e) {
+        if (e.reason && String(e.reason).includes('startTime')) {
+          e.preventDefault();
+        }
+      });
+    </script>
+  </head>
+  <body class="bg-[#F9FAFB] text-slate-900 antialiased font-sans min-h-screen selection:bg-emerald-600 selection:text-white">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

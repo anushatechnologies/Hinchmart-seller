@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <defs>
+    <linearGradient id="hmFavSteel" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1e293b" />
+      <stop offset="100%" stop-color="#0f172a" />
+    </linearGradient>
+    <linearGradient id="hmFavGold" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95" />
+      <stop offset="100%" stop-color="#fef3c7" stop-opacity="0.8" />
+    </linearGradient>
+  </defs>
+
+  <!-- Hexagonal Industrial Nut / Badge Container -->
+  <path
+    d="M24 3L42 13.5V34.5L24 45L6 34.5V13.5L24 3Z"
+    fill="url(#hmFavSteel)"
+    stroke="#fbbf24"
+    stroke-width="2"
+    stroke-linejoin="round"
+  />
+
+  <!-- Left Column: Masonry Block Pillar -->
+  <path d="M13 14H19V34H13V14Z" fill="url(#hmFavGold)" />
+  <path d="M13 20H19" stroke="#0f172a" stroke-width="1.2" stroke-linecap="round" />
+  <path d="M13 27H19" stroke="#0f172a" stroke-width="1.2" stroke-linecap="round" />
+
+  <!-- Right Column: Structural Steel I-Beam Flange -->
+  <path d="M29 14H35V34H29V14Z" fill="url(#hmFavGold)" />
+  <path d="M29 20H35" stroke="#0f172a" stroke-width="1.2" stroke-linecap="round" />
+  <path d="M29 27H35" stroke="#0f172a" stroke-width="1.2" stroke-linecap="round" />
+
+  <!-- Center Girder / Crossbar -->
+  <path d="M18 21.5H30V26.5H18V21.5Z" fill="#fbbf24" stroke="#0f172a" stroke-width="1" />
+
+  <!-- Construction Roof Truss Apex -->
+  <path d="M24 8L31 14H17L24 8Z" fill="#fbbf24" />
+
+  <!-- Foundation Plinth -->
+  <path d="M10 34H38V37.5H10V34Z" fill="#fbbf24" rx="1" />
+
+  <!-- Central Bolt Accent -->
+  <circle cx="24" cy="24" r="1.5" fill="#0f172a" />
+</svg>

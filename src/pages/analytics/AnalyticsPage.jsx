@@ -1,0 +1,310 @@
+import React, { useState } from 'react';
+import {
+  ResponsiveContainer,
+  AreaChart,
+  Area,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  PieChart,
+  Pie,
+  Cell,
+  Legend,
+} from 'recharts';
+import {
+  BarChart3,
+  TrendingUp,
+  Download,
+  Calendar,
+  IndianRupee,
+  ShoppingCart,
+  HelpCircle,
+  Eye,
+  Percent,
+  Layers,
+} from 'lucide-react';
+import { useAnalytics } from '../../hooks/useAnalytics';
+import { useProducts } from '../../hooks/useProducts';
+import { StatsCard, ChartCard } from '../../components/common/StatsCard';
+import { Button } from '../../components/common/Button';
+import { exportToCsv } from '../../utils/exportUtils';
+import { formatCurrency, formatNumber } from '../../utils/formatters';
+
+export function AnalyticsPage() {
+  const [timeRange, setTimeRange] = useState('30d');
+  const { analytics, isLoading } = useAnalytics(timeRange);
+  const { products } = useProducts();
+
+  const kpis = analytics?.kpis || {};
+  const revenueData = analytics?.revenueOverview || [];
+  const categoryData = analytics?.categoryBreakdown || [];
+  const funnelData = analytics?.conversionFunnel || [];
+
+  const handleExport = () => {
+    const exportRows = revenueData.map((r) => ({
+      Period: r.month,
+      GrossRevenue: r.revenue,
+      OrdersCompleted: r.orders,
+      RFQsReceived: r.enquiries,
+    }));
+    exportToCsv('HinchMart_Commercial_Analytics_Report', exportRows);
+  };
+
+  const topMaterials = [...products]
+    .sort((a, b) => (b.totalSales || 0) - (a.totalSales || 0))
+    .slice(0, 5);
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+        <div>
+          <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
+            Commercial Analytics & Performance Reports
+          </h1>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Turnover trends, RFQ conversion funnel, material category demand, and institutional buyer analytics
+          </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex items-center gap-1 bg-white p-1 rounded-lg border border-slate-200 shadow-xs text-xs font-semibold text-slate-700">
+            {['today', '7d', '30d', '3m', '1y'].map((range) => (
+              <button
+                key={range}
+                onClick={() => setTimeRange(range)}
+                className={`px-3 py-1.5 rounded-md capitalize transition-all ${
+                  timeRange === range
+                    ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
+                    : 'hover:text-slate-900'
+                }`}
+              >
+                {range}
+              </button>
+            ))}
+          </div>
+
+          <Button variant="secondary" size="sm" onClick={handleExport} leftIcon={Download}>
+            Export Report CSV
+          </Button>
+        </div>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatsCard
+          title="Gross Merchandise Value (GMV)"
+          value={formatCurrency(kpis.totalRevenue || 0)}
+          icon={IndianRupee}
+          color="emerald"
+        />
+
+        <StatsCard
+          title="Purchase Orders Placed"
+          value={kpis.totalOrders || 0}
+          icon={ShoppingCart}
+          color="blue"
+          subtext={`Avg Order Value: ${formatCurrency(kpis.averageOrderValue || 0)}`}
+        />
+
+        <StatsCard
+          title="RFQ-to-Order Conversion Rate"
+          value={`${kpis.conversionRate || 0}%`}
+          icon={Percent}
+          color="amber"
+          subtext="Industry Benchmark: 35%"
+        />
+
+        <StatsCard
+          title="Unique Material Inquiries"
+          value={kpis.totalEnquiries || 0}
+          icon={HelpCircle}
+          color="purple"
+        />
+      </div>
+
+      {/* Trajectory Charts */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        {/* Revenue Area Chart (8 cols) */}
+        <div className="lg:col-span-8">
+          <ChartCard
+            title="Gross Revenue & Orders Trajectory"
+            subtitle="Monthly turnover in INR (Lakhs) and PO fulfillment count"
+          >
+            <div className="h-80 w-full pt-4">
+              <ResponsiveContainer width="100%" height="100%">
+                <AreaChart data={revenueData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="salesGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4} />
+                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0.0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                  <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#64748b' }} axisLine={false} />
+                  <YAxis
+                    tick={{ fontSize: 11, fill: '#64748b' }}
+                    axisLine={false}
+                    tickFormatter={(val) => `₹${(val / 100000).toFixed(0)}L`}
+                  />
+                  <Tooltip
+                    formatter={(val) => [formatCurrency(val), 'Gross Revenue']}
+                    contentStyle={{
+                      backgroundColor: '#0f172a',
+                      borderRadius: '8px',
+                      color: '#fff',
+                      fontSize: '12px',
+                    }}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="revenue"
+                    stroke="#f59e0b"
+                    strokeWidth={3}
+                    fillOpacity={1}
+                    fill="url(#salesGrad)"
+                  />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+          </ChartCard>
+        </div>
+
+        {/* Category Breakdown (4 cols) */}
+        <div className="lg:col-span-4">
+          <ChartCard
+            title="Revenue by Category Share"
+            subtitle="Turnover contribution by category"
+          >
+            <div className="h-80 w-full flex items-center justify-center">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={categoryData}
+                    cx="50%"
+                    cy="45%"
+                    innerRadius={55}
+                    outerRadius={80}
+                    paddingAngle={3}
+                    dataKey="value"
+                  >
+                    {categoryData.map((entry, index) => (
+                      <Cell key={`cell-${index}`} fill={entry.color} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(val, name, item) => [
+                      `${val}% (${formatCurrency(item.payload.revenue)})`,
+                      item.payload.name,
+                    ]}
+                    contentStyle={{
+                      backgroundColor: '#0f172a',
+                      borderRadius: '8px',
+                      color: '#fff',
+                      fontSize: '12px',
+                    }}
+                  />
+                  <Legend
+                    verticalAlign="bottom"
+                    iconType="circle"
+                    formatter={(val) => (
+                      <span className="text-[11px] text-slate-600">{val}</span>
+                    )}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </ChartCard>
+        </div>
+      </div>
+
+      {/* Funnel & Top Selling Materials */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* RFQ to Order Conversion Funnel */}
+        <ChartCard
+          title="B2B Procurement Conversion Funnel"
+          subtitle="Buyer journey from initial material views to delivered purchase orders"
+        >
+          <div className="h-72 w-full pt-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                data={funnelData}
+                layout="vertical"
+                margin={{ top: 10, right: 30, left: 40, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f1f5f9" />
+                <XAxis type="number" tick={{ fontSize: 11, fill: '#64748b' }} axisLine={false} />
+                <YAxis
+                  dataKey="stage"
+                  type="category"
+                  tick={{ fontSize: 11, fill: '#334155', fontWeight: 600 }}
+                  axisLine={false}
+                  width={110}
+                />
+                <Tooltip
+                  formatter={(val) => [formatNumber(val), 'Count']}
+                  contentStyle={{
+                    backgroundColor: '#0f172a',
+                    borderRadius: '8px',
+                    color: '#fff',
+                    fontSize: '12px',
+                  }}
+                />
+                <Bar dataKey="count" fill="#d97706" radius={[0, 4, 4, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        </ChartCard>
+
+        {/* Top Selling Construction Materials */}
+        <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-xs space-y-4">
+          <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">
+                Top Grossing Construction Materials
+              </h3>
+              <p className="text-xs text-slate-500">Highest volume SKUs by overall unit turnover</p>
+            </div>
+          </div>
+
+          <div className="overflow-x-auto text-xs">
+            <table className="w-full text-left">
+              <thead className="bg-slate-50 font-bold text-[11px] text-slate-600 uppercase border-b border-slate-200">
+                <tr>
+                  <th className="py-2 px-3">Material</th>
+                  <th className="py-2 px-3">Unit Price</th>
+                  <th className="py-2 px-3">Total Sold</th>
+                  <th className="py-2 px-3 text-right">Gross Turn</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 font-medium">
+                {topMaterials.map((m) => (
+                  <tr key={m.id} className="hover:bg-slate-50">
+                    <td className="py-2.5 px-3">
+                      <span className="font-bold text-slate-900 block truncate max-w-[200px]">
+                        {m.name}
+                      </span>
+                      <span className="text-[10px] text-slate-400 font-mono">{m.sku}</span>
+                    </td>
+                    <td className="py-2.5 px-3">
+                      {formatCurrency(m.sellingPrice)} / {m.unit}
+                    </td>
+                    <td className="py-2.5 px-3 font-bold text-slate-800">
+                      {formatNumber(m.totalSales || 1200)} {m.unit}
+                    </td>
+                    <td className="py-2.5 px-3 text-right font-extrabold text-emerald-600">
+                      {formatCurrency((m.totalSales || 1200) * m.sellingPrice)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

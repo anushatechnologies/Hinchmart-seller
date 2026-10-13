@@ -1,0 +1,701 @@
+================================================================================
+HINCHMART B2B SELLER PORTAL — COMPLETE BACKEND API & WORKFLOW SPECIFICATION
+================================================================================
+Document Version: 2.0 (Frozen Master Release)
+System: HinchMart B2B Marketplace — Seller Web Portal
+Target Audience: Backend Engineering Team
+Base URL Standard: https://api.hinchmart.com/api/v1
+Authentication Standard: Bearer JWT Token (Header: Authorization: Bearer <token>)
+Date: August 2026
+
+--------------------------------------------------------------------------------
+TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+1. Master Architecture & End-to-End Workflows
+   1.1 Flow 1: Existing Seller Mobile OTP Login
+   1.2 Flow 2: New Seller Registration (No OTP Before Account Check)
+   1.3 Flow 3: Complete Order Lifecycle (New ──▶ Completed)
+   1.4 Flow 4: Invoice vs E-Way Bill Rule (Dispatch Workflow)
+   1.5 Flow 5: Product & Category Labels Workflow
+2. Authentication & Account Existence APIs
+   2.1 Check Account Existence (POST /auth/check-account)
+   2.2 Send Mobile OTP (POST /auth/send-otp)
+   2.3 Verify Mobile OTP (POST /auth/verify-otp)
+   2.4 KYC Document Upload (POST /documents/upload)
+   2.5 Multi-Step Seller Registration (POST /auth/register)
+   2.6 Bank Metadata & Account Number Validation Rules (GET /banks/metadata)
+3. Orders, Invoice, Dispatch & Delivery Lifecycle APIs
+   3.1 Get Orders List (GET /seller/orders)
+   3.2 Get Order Details by ID (GET /seller/orders/:id)
+   3.3 Generate Commercial Tax Invoice (POST /seller/orders/:id/invoice)
+   3.4 Dispatch Order (POST /seller/orders/:id/dispatch)
+   3.5 In-Transit Live Tracking (POST /seller/orders/:id/tracking)
+   3.6 Mark Delivered & Confirm POD (POST /seller/orders/:id/pod)
+   3.7 Update Order Status (PATCH /seller/orders/:id/status)
+4. Catalogue, Products & Labels APIs
+   4.1 Products CRUD (GET, POST, PUT, DELETE /seller/products)
+   4.2 Product Labels & Categories (GET, POST /seller/products/labels)
+5. Inventory, RFQs, Quotations, Customers & Payments APIs
+   5.1 Inventory Stock & Warehouses (GET, PUT /seller/inventory)
+   5.2 RFQs & Quotations (GET /seller/enquiries, POST /seller/quotations)
+   5.3 Customers & Business Profile (GET /seller/customers, GET /seller/profile)
+   5.4 Payments & Settlements (GET /seller/payments)
+6. Error Handling & HTTP Status Code Matrix
+7. Backend Integration & Handoff Checklist
+
+
+================================================================================
+1. MASTER ARCHITECTURE & END-TO-END WORKFLOWS
+================================================================================
+
+1.1 FLOW 1: EXISTING SELLER MOBILE OTP LOGIN
+--------------------------------------------
+[Step 1: Enter Mobile Number]
+  - Prefix: +91 | 10-digit Indian Mobile Number
+  - Action: User clicks [ Check Account ] (Note: NOT Send OTP directly)
+  - Helper: "We will check if your account exists."
+       │
+       ▼ POST /auth/check-account { mobileNumber: "9876543210" }
+[Step 2: Account Check (Backend Verification)]
+       │
+       └──▶ [ Account Exists: TRUE ]
+               │
+               ▼ Displays: "Account Found! We will send you OTP."
+               ▼ Action: User clicks [ Proceed to OTP ] (or auto-triggers)
+               ▼ POST /auth/send-otp { mobileNumber: "9876543210" }
+[Step 3: Send OTP & Enter OTP]
+  - 6-digit OTP delivered via SMS Gateway / Firebase Phone Auth
+  - UI renders 6 individual boxes (_ _ _ _ _ _)
+  - Timer: 45s countdown + Resend OTP
+  - Action: [ Verify OTP ]
+       │
+       ▼ POST /auth/verify-otp { phone: "9876543210", otp: "123456" }
+[Step 4: Verify OTP & Profile Check]
+  - Backend verifies OTP code against session record
+  - Generates JWT Bearer Token
+  - Checks seller profile status:
+      - Profile Complete ──▶ UI shows "OTP Verified ✓" ──▶ Redirects to /seller/dashboard
+      - Profile Incomplete ──▶ Redirects to missing registration section
+
+
+1.2 FLOW 2: NEW SELLER REGISTRATION (NO OTP BEFORE ACCOUNT CHECK)
+-----------------------------------------------------------------
+[Step 1: Enter Mobile Number]
+  - User enters un-registered mobile (e.g. 9123456789)
+  - Clicks: [ Check Account ]
+       │
+       ▼ POST /auth/check-account { mobileNumber: "9123456789" }
+[Step 2: Account Check (Backend Verification)]
+       │
+       └──▶ [ Account Exists: FALSE ]
+               │
+               ▼ CRITICAL BUSINESS RULE: DO NOT SEND OTP AT THIS STAGE!
+               ▼ UI Displays Red Alert State:
+                 🔴 Account Not Found
+                 "This mobile number is not registered with HinchMart."
+                 "Please register your business to continue."
+               ▼ Primary Action: [ Register Your Business ]
+                 (Navigates to /register with mobile number prefilled)
+
+[Step 3: Multi-Step Registration Wizard]
+  ├─▶ Step 2.1: Personal & KYC Details
+  │     - Full Name * (Letters and spaces only, min 2 chars)
+  │     - Mobile Number * (+91, 10 digits, prefilled)
+  │     - Official Business Email * (Valid email RFC format)
+  │     - Aadhaar Number * (Exactly 12 numeric digits)
+  │     - PAN Card Number * (10 alphanumeric uppercase: ABCDE1234F)
+  │     - Upload PAN Card * (JPG, PNG, PDF max 10MB via POST /documents/upload)
+  │
+  ├─▶ Step 2.2: Business & Tax Details
+  │     - Business / Company Name * (Non-empty)
+  │     - Business Classification * (Manufacturer, Distributor, Wholesaler, etc.)
+  │     - GSTIN * (15 chars statutory GST format: 29ABCDE1234F1Z5)
+  │     - Business Address * (Full street / industrial address)
+  │     - State * (Select Indian state)
+  │     - City * (City / District)
+  │     - Pincode * (6 numeric digits)
+  │
+  ├─▶ Step 2.3: Bank & Settlement Details
+  │     - Bank Name * (Letters and spaces only)
+  │     - Account Holder Name * (Letters and spaces only)
+  │     - Account Number * (8 to 20 digits)
+  │     - Confirm Account Number * (Must match Account Number exactly)
+  │     - IFSC Code * (11 uppercase alphanumeric: HDFC0000123)
+  │
+  ├─▶ Step 2.4: Verification & Documents (Review Checklist)
+  │     - Summary Review:
+  │       ✓ Personal Details (Complete)
+  │       ✓ Business & Tax Details (Complete)
+  │       ✓ Bank & Settlement Details (Complete)
+  │       ✓ Documents Uploaded (Complete)
+  │     - Action: [ Submit & Verify ]
+  │
+  └─▶ Step 2.5: Account Creation & Registration Successful
+        - POST /auth/register (Atomic creation of seller, user auth, bank, and KYC records)
+        - Verification Status initialized to: "Pending" (Admin Review Only)
+        - UI renders Green Checkmark: "Registration Successful! Your seller account has been created."
+        - Action: [ Go to Dashboard ] ──▶ Redirects to /seller/dashboard
+
+
+1.3 FLOW 3: COMPLETE ORDER LIFECYCLE (NEW ──▶ COMPLETED)
+--------------------------------------------------------
+The lifecycle follows 10 distinct phases without skipping essential logistics stages:
+
+                  BUYER ORDER
+                       │
+                       ▼
+                    [ NEW ] ──────────── (Order placed by buyer, stock reserved)
+                       │
+                       ▼ PATCH /seller/orders/:id/status { status: "Confirmed" }
+                 [ CONFIRMED ] ───────── (Seller accepted & confirmed order)
+                       │
+                       ▼ PATCH /seller/orders/:id/status { status: "Processing" }
+                 [ PROCESSING ] ──────── (Picking, bundling & weight test)
+                       │
+                       ▼ PATCH /seller/orders/:id/status { status: "Ready for Dispatch" }
+              [ PACKED / READY ] ─────── (Bundled with IS tags at warehouse bay)
+                       │
+                       ▼ (Mandatory Invoice check before dispatch)
+             [ INVOICE GENERATED ] ───── (Statutory Commercial Tax Invoice created)
+                       │
+                       ▼ POST /seller/orders/:id/dispatch
+                 [ DISPATCHED ] ──────── (Handed over to carrier with vehicle & driver info)
+                       │
+                       ▼ PATCH /seller/orders/:id/status { status: "In Transit" }
+                 [ IN TRANSIT ] ──────── (Live GPS / Docket tracking en route to site)
+                       │
+                       ▼ PATCH /seller/orders/:id/status { status: "Delivered" }
+                  [ DELIVERED ] ──────── (Delivered at buyer site address)
+                       │
+                       ▼ POST /seller/orders/:id/pod
+                [ POD CONFIRMED ] ────── (Site Engineer signed GRN / Proof of Delivery uploaded)
+                       │
+                       ▼
+                  [ COMPLETED ] ──────── (Order finished, payment settled to seller)
+
+
+1.4 FLOW 4: INVOICE VS E-WAY BILL RULE (DISPATCH WORKFLOW)
+----------------------------------------------------------
+In the Seller Portal:
+  1. Commercial Tax Invoice is MANDATORY before Dispatch.
+  2. If Invoice is missing: Seller must click [ Generate Invoice ].
+  3. Duplicate Prevention: Once generated, the invoice number (INV-YYYY-XXXXX) is permanent.
+  4. E-Way Bill is NOT a mandatory Seller dispatch UI dependency in this workflow.
+  5. The Dispatch modal collects Carrier Name, Vehicle Number, Driver Contact, Tracking Number, and Loading Notes, and automatically attaches the Commercial Tax Invoice.
+
+
+1.5 FLOW 5: PRODUCT & CATEGORY LABELS WORKFLOW
+----------------------------------------------
+Product Labels are separate from Order Status.
+  - Create Label: Label Name, Label Type (Badge, Tag, Banner), Color Scheme.
+  - Predefined Labels: Bestseller, New Arrival, High Margin, Low Stock, Seasonal, Bulk Order, Fast Moving, Clearance.
+  - Apply to Products: Bulk assign labels to selected products or categories.
+  - Filter & Search: Enable buyers and sellers to filter catalogue by active product labels.
+
+
+================================================================================
+2. AUTHENTICATION & ACCOUNT EXISTENCE APIS
+================================================================================
+
+--------------------------------------------------------------------------------
+2.1 CHECK ACCOUNT EXISTENCE
+--------------------------------------------------------------------------------
+Method: POST
+URL: /api/v1/auth/check-account
+Access: Public
+
+Request Payload:
+{
+  "mobileNumber": "9876543210"
+}
+
+Validation Rules:
+- mobileNumber: String, exactly 10 numeric digits starting with 6, 7, 8, or 9 (/^[6-9][0-9]{9}$/).
+
+Success Response — Account Exists (200 OK):
+{
+  "success": true,
+  "exists": true,
+  "phone": "9876543210",
+  "formattedPhone": "+91 9876543210",
+  "sellerName": "Ultratech Materials Pvt Ltd",
+  "message": "Account found. Ready to send OTP."
+}
+
+Success Response — Account Not Found (200 OK):
+{
+  "success": true,
+  "exists": false,
+  "phone": "9123456789",
+  "formattedPhone": "+91 9123456789",
+  "message": "Account not found. Please register your business."
+}
+
+
+--------------------------------------------------------------------------------
+2.2 SEND MOBILE OTP (EXISTING USERS ONLY)
+--------------------------------------------------------------------------------
+Method: POST
+URL: /api/v1/auth/send-otp
+Access: Public
+
+Request Payload:
+{
+  "mobileNumber": "9876543210"
+}
+
+Success Response (200 OK):
+{
+  "success": true,
+  "message": "OTP sent successfully to +91 9876543210",
+  "data": {
+    "phone": "9876543210",
+    "formattedPhone": "+91 9876543210",
+    "retryAfterSeconds": 45
+  }
+}
+
+
+--------------------------------------------------------------------------------
+2.3 VERIFY MOBILE OTP
+--------------------------------------------------------------------------------
+Method: POST
+URL: /api/v1/auth/verify-otp
+Access: Public
+
+Request Payload:
+{
+  "phone": "9876543210",
+  "otp": "123456"
+}
+
+Success Response (200 OK):
+{
+  "success": true,
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "id": "usr_001",
+    "name": "Rajesh Sharma",
+    "email": "rajesh@ultratechmaterials.com",
+    "phone": "+91 9876543210",
+    "role": "SELLER_ADMIN",
+    "companyName": "Ultratech Materials Pvt Ltd"
+  },
+  "seller": {
+    "id": "seller_001",
+    "companyName": "Ultratech Materials Pvt Ltd",
+    "verified": false,
+    "verificationStatus": "Pending"
+  }
+}
+
+
+--------------------------------------------------------------------------------
+2.4 KYC DOCUMENT UPLOAD
+--------------------------------------------------------------------------------
+Method: POST
+URL: /api/v1/documents/upload
+Access: Public / Multipart Form Data
+
+Form Data:
+- file: Binary (JPG, PNG, PDF, max 10MB)
+- documentType: "PAN_CARD" | "GST_CERTIFICATE" | "CANCELLED_CHEQUE"
+
+Success Response (201 Created):
+{
+  "success": true,
+  "file": {
+    "documentId": "doc_pan_987654",
+    "name": "PAN_Card.pdf",
+    "fileUrl": "https://storage.hinchmart.com/docs/sellers/pan_987654.pdf",
+    "fileSize": "1.4 MB",
+    "fileType": "application/pdf",
+    "status": "Pending"
+  }
+}
+
+
+--------------------------------------------------------------------------------
+2.5 MULTI-STEP SELLER REGISTRATION
+--------------------------------------------------------------------------------
+Method: POST
+URL: /api/v1/auth/register
+Access: Public
+
+Request Payload:
+{
+  "fullName": "Vikram Aditya",
+  "mobileNumber": "9123456789",
+  "email": "vikram@adityasteel.com",
+  "aadhaarNumber": "123456789012",
+  "panCardNumber": "ABCDE1234F",
+  "panCardDocumentId": "doc_pan_987654",
+  "companyName": "Aditya Steel & Infrastructure Pvt Ltd",
+  "businessType": "Manufacturer",
+  "gstin": "27ABCDE1234F1Z5",
+  "businessAddress": "Plot 42, Industrial Logistics Park, Phase 2",
+  "state": "Maharashtra",
+  "city": "Mumbai",
+  "pincode": "400072",
+  "bankName": "HDFC Bank",
+  "accountHolderName": "Vikram Aditya",
+  "accountNumber": "50100234567890",
+  "confirmAccountNumber": "50100234567890",
+  "ifscCode": "HDFC0000123"
+}
+
+Success Response (201 Created):
+{
+  "success": true,
+  "message": "Business registered successfully",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "id": "usr_99812",
+    "name": "Vikram Aditya",
+    "email": "vikram@adityasteel.com",
+    "phone": "+91 9123456789",
+    "role": "SELLER_ADMIN",
+    "companyName": "Aditya Steel & Infrastructure Pvt Ltd"
+  },
+  "seller": {
+    "id": "seller_99812",
+    "companyName": "Aditya Steel & Infrastructure Pvt Ltd",
+    "verificationStatus": "Pending",
+    "verified": false
+  }
+}
+
+
+--------------------------------------------------------------------------------
+2.6 BANK METADATA & ACCOUNT NUMBER VALIDATION RULES (BANK-AWARE)
+--------------------------------------------------------------------------------
+Method: GET
+URL: /api/v1/banks/metadata (Recommended Backend Endpoint)
+Access: Public
+
+Indian bank account numbers do not use a single fixed length. Account number validation must be bank-aware based on the selected Bank Name.
+
+Bank Account Length Matrix:
+--------------------------------------------------------------------------------
+Bank Name                     Account Number Length / Range    Pattern
+--------------------------------------------------------------------------------
+HDFC Bank                     Exactly 14 digits                /^[0-9]{14}$/
+ICICI Bank                    Exactly 12 digits                /^[0-9]{12}$/
+State Bank of India (SBI)     11 to 17 digits                  /^[0-9]{11,17}$/
+Axis Bank                     Exactly 15 digits                /^[0-9]{15}$/
+Kotak Mahindra Bank           Exactly 10 digits                /^[0-9]{10}$/
+Punjab National Bank (PNB)    Exactly 16 digits                /^[0-9]{16}$/
+Bank of Baroda                10 to 14 digits                  /^[0-9]{10,14}$/
+Canara Bank                   Exactly 13 digits                /^[0-9]{13}$/
+Union Bank of India           Exactly 15 digits                /^[0-9]{15}$/
+IndusInd Bank                 12 to 13 digits                  /^[0-9]{12,13}$/
+Yes Bank                      Exactly 15 digits                /^[0-9]{15}$/
+IDBI Bank                     Exactly 16 digits                /^[0-9]{16}$/
+Bank of India (BOI)           Exactly 15 digits                /^[0-9]{15}$/
+Central Bank of India         Exactly 10 digits                /^[0-9]{10}$/
+Indian Bank                   9 to 10 digits                   /^[0-9]{9,10}$/
+Federal Bank                  Exactly 14 digits                /^[0-9]{14}$/
+IDFC FIRST Bank               11 to 12 digits                  /^[0-9]{11,12}$/
+Other Scheduled Commercial    9 to 18 digits                   /^[0-9]{9,18}$/
+
+Validation & Security Rules:
+1. Input Restriction: Digits only (0-9). Reject letters, special characters, and spaces immediately upon keystroke/paste.
+2. Dynamic Maximum Length: Set HTML maxLength dynamically matching the selected bank's maxLength.
+3. Live Re-validation: When bank selection changes, re-validate account number against the new bank's rule.
+4. Masking on Display: Mask account number on reviews and profiles (e.g. XXXXXX7890). Never expose full account numbers in logs or public responses.
+5. Confirmation Check: confirmAccountNumber must match accountNumber exactly.
+
+
+================================================================================
+3. ORDERS, INVOICE, DISPATCH & DELIVERY LIFECYCLE APIS
+================================================================================
+
+--------------------------------------------------------------------------------
+3.1 GET ORDERS LIST
+--------------------------------------------------------------------------------
+Method: GET
+URL: /api/v1/seller/orders
+Access: Protected (Bearer Token)
+Query Parameters:
+- status: "All" | "New" | "Confirmed" | "Processing" | "Ready for Dispatch" | "Dispatched" | "In Transit" | "Delivered" | "Completed" | "Cancelled"
+- paymentStatus: "All" | "Paid" | "Pending" | "Escrow Secured" | "Credit Account"
+- search: string (matches orderNumber, buyer company, or buyer contact name)
+- page: integer (default 1)
+- limit: integer (default 20)
+
+Success Response (200 OK):
+{
+  "success": true,
+  "data": [
+    {
+      "id": "ord_9082",
+      "orderNumber": "ORD-2026-09082",
+      "createdAt": "2026-08-18T11:00:00.000Z",
+      "orderStatus": "Ready for Dispatch",
+      "paymentStatus": "Credit (30 Days)",
+      "buyer": {
+        "company": "Shapoorji Pallonji Infra & Power",
+        "name": "Arun Deshmukh",
+        "phone": "+91 98199 44332",
+        "gstin": "27AAACS4321D1Z8"
+      },
+      "deliveryAddress": {
+        "siteName": "Metro Line 4 Casting Yard",
+        "city": "Thane",
+        "state": "Maharashtra"
+      },
+      "itemsCount": 1,
+      "totalAmount": 3686200,
+      "invoice": {
+        "invoiceNumber": "INV-2026-09082",
+        "invoiceDate": "2026-08-18",
+        "status": "Generated"
+      }
+    }
+  ],
+  "pagination": {
+    "total": 1,
+    "page": 1,
+    "limit": 20
+  }
+}
+
+
+--------------------------------------------------------------------------------
+3.2 GET ORDER DETAILS BY ID
+--------------------------------------------------------------------------------
+Method: GET
+URL: /api/v1/seller/orders/:id
+Access: Protected (Bearer Token)
+
+Success Response (200 OK):
+{
+  "success": true,
+  "order": {
+    "id": "ord_9082",
+    "orderNumber": "ORD-2026-09082",
+    "createdAt": "2026-08-18T11:00:00.000Z",
+    "orderStatus": "Ready for Dispatch",
+    "paymentStatus": "Credit (30 Days)",
+    "buyer": {
+      "name": "Arun Deshmukh",
+      "company": "Shapoorji Pallonji Infra & Power",
+      "phone": "+91 98199 44332",
+      "email": "arun.d@shapoorji.in",
+      "gstin": "27AAACS4321D1Z8"
+    },
+    "deliveryAddress": {
+      "siteName": "Metro Line 4 Casting Yard",
+      "address": "Ghodbunder Road, Kasarvadavali, Thane West - 400615",
+      "city": "Thane",
+      "state": "Maharashtra"
+    },
+    "items": [
+      {
+        "productId": "prod_3",
+        "name": "Jindal Panther Fe 550D TMT Bars 16mm",
+        "sku": "STEEL-JIN-550D-16MM",
+        "hsnCode": "72142090",
+        "unitPrice": 61800,
+        "quantity": 50,
+        "unit": "Ton",
+        "gstRate": 18,
+        "total": 3090000
+      }
+    ],
+    "subtotal": 3090000,
+    "gstAmount": 556200,
+    "freightCharges": 40000,
+    "totalAmount": 3686200,
+    "invoice": {
+      "invoiceNumber": "INV-2026-09082",
+      "invoiceDate": "2026-08-18",
+      "status": "Generated"
+    }
+  }
+}
+
+
+--------------------------------------------------------------------------------
+3.3 GENERATE COMMERCIAL TAX INVOICE
+--------------------------------------------------------------------------------
+Method: POST
+URL: /api/v1/seller/orders/:id/invoice
+Access: Protected (Bearer Token)
+
+Duplicate Prevention Logic:
+If an invoice is already generated for this order, the backend MUST NOT regenerate a new invoice number; it must return the existing invoice.
+
+Success Response (200 OK / 201 Created):
+{
+  "success": true,
+  "message": "Commercial Tax Invoice generated successfully",
+  "invoice": {
+    "invoiceNumber": "INV-2026-09082",
+    "invoiceDate": "2026-08-18",
+    "generatedAt": "2026-08-18T11:05:00.000Z",
+    "status": "Generated",
+    "sellerName": "Ultratech Materials Pvt Ltd",
+    "sellerGstin": "27AABCV1234E1Z5",
+    "buyerCompany": "Shapoorji Pallonji Infra & Power",
+    "buyerGstin": "27AAACS4321D1Z8",
+    "subtotal": 3090000,
+    "gstAmount": 556200,
+    "freightCharges": 40000,
+    "totalAmount": 3686200
+  },
+  "order": {
+    "id": "ord_9082",
+    "orderNumber": "ORD-2026-09082",
+    "hasInvoice": true
+  }
+}
+
+
+--------------------------------------------------------------------------------
+3.4 DISPATCH ORDER (E-WAY BILL REMOVED, INVOICE ATTACHED)
+--------------------------------------------------------------------------------
+Method: POST
+URL: /api/v1/seller/orders/:id/dispatch
+Access: Protected (Bearer Token)
+
+Request Payload:
+{
+  "transporter": "VRL Heavy Logistics Fleet",
+  "vehicleNo": "MH-04-GP-8812",
+  "driverContact": "+91 94221 00987",
+  "trackingNumber": "TRK2026881290",
+  "notes": "Loaded and weighed at Bhiwandi Central Bay 3."
+}
+
+Success Response (200 OK):
+{
+  "success": true,
+  "message": "Order dispatched successfully",
+  "order": {
+    "id": "ord_9082",
+    "orderNumber": "ORD-2026-09082",
+    "orderStatus": "Dispatched",
+    "invoiceAttached": "INV-2026-09082"
+  }
+}
+
+
+--------------------------------------------------------------------------------
+3.5 CONFIRM PROOF OF DELIVERY (POD)
+--------------------------------------------------------------------------------
+Method: POST
+URL: /api/v1/seller/orders/:id/pod
+Access: Protected (Bearer Token)
+
+Request Payload:
+{
+  "receivedBy": "Arun Deshmukh (Site Engineer)",
+  "receiverPhone": "+91 98199 44332",
+  "deliveryTimestamp": "2026-08-22T14:30:00Z",
+  "grnNumber": "GRN-MH-400615-992",
+  "notes": "Material unloaded and physically inspected. Tare weight matches delivery challan."
+}
+
+Success Response (200 OK):
+{
+  "success": true,
+  "message": "POD Confirmed. Order status moved to Completed.",
+  "orderStatus": "Completed"
+}
+
+
+--------------------------------------------------------------------------------
+3.6 UPDATE ORDER STATUS
+--------------------------------------------------------------------------------
+Method: PATCH
+URL: /api/v1/seller/orders/:id/status
+Access: Protected (Bearer Token)
+
+Request Payload:
+{
+  "status": "In Transit",
+  "notes": "Consignment en route to site location"
+}
+
+Allowed Lifecycle Status Transitions:
+- New ──▶ Confirmed
+- Confirmed ──▶ Processing
+- Processing ──▶ Ready for Dispatch
+- Ready for Dispatch ──▶ Dispatched (via /dispatch)
+- Dispatched ──▶ In Transit
+- In Transit ──▶ Delivered
+- Delivered ──▶ Completed (via /pod)
+- New | Confirmed | Processing ──▶ Cancelled
+
+Success Response (200 OK):
+{
+  "success": true,
+  "message": "Order status updated to In Transit",
+  "orderStatus": "In Transit"
+}
+
+
+================================================================================
+4. CATALOGUE, PRODUCTS & LABELS APIS
+================================================================================
+
+--------------------------------------------------------------------------------
+4.1 PRODUCTS CRUD
+--------------------------------------------------------------------------------
+- GET /api/v1/seller/products (List products with category, stock, price, status)
+- POST /api/v1/seller/products (Create new product with category-specific fields)
+- PUT /api/v1/seller/products/:id (Update product details, pricing, inventory)
+- DELETE /api/v1/seller/products/:id (Archive product)
+
+--------------------------------------------------------------------------------
+4.2 PRODUCT LABELS
+--------------------------------------------------------------------------------
+- GET /api/v1/seller/products/labels (List labels: Bestseller, New Arrival, High Margin, etc.)
+- POST /api/v1/seller/products/labels (Create custom label)
+- POST /api/v1/seller/products/labels/apply (Assign label to products or categories)
+
+
+================================================================================
+5. INVENTORY, RFQS, QUOTATIONS, CUSTOMERS & PAYMENTS APIS
+================================================================================
+- GET /api/v1/seller/inventory (Available stock, reserved stock, low stock items)
+- GET /api/v1/seller/enquiries (Buyer RFQs received)
+- POST /api/v1/seller/quotations (Submit B2B quotation with GST, freight, lead time)
+- GET /api/v1/seller/customers (Customer business directory, order history)
+- GET /api/v1/seller/payments (Transaction records, escrow payouts, settlements)
+- GET /api/v1/seller/profile (Legal GSTIN, PAN, bank details, verification status)
+
+
+================================================================================
+6. ERROR HANDLING & HTTP STATUS CODE MATRIX
+================================================================================
+
+HTTP Code              Error Code             Description / Trigger
+--------------------------------------------------------------------------------
+400 Bad Request        VALIDATION_ERROR       Invalid input format (e.g. invalid GSTIN, non-numeric phone)
+401 Unauthorized       INVALID_TOKEN          Missing or expired JWT Bearer token
+403 Forbidden          PROFILE_INCOMPLETE     Seller profile missing required statutory fields
+404 Not Found          SELLER_NOT_FOUND       Mobile number not registered (Triggers Flow 2)
+404 Not Found          ORDER_NOT_FOUND        Specified order ID does not exist
+409 Conflict           ALREADY_EXISTS         Phone number or GSTIN already registered
+422 Unprocessable      INVALID_TRANSITION     Invalid status transition (e.g. New directly to Delivered)
+500 Internal Error     INTERNAL_ERROR         Database or service failure
+
+
+================================================================================
+7. BACKEND INTEGRATION & HANDOFF CHECKLIST
+================================================================================
+[ ] Implement POST /auth/check-account returning { exists: true/false } without sending OTP.
+[ ] Implement POST /auth/send-otp ONLY for existing accounts or upon final registration step.
+[ ] Implement POST /auth/verify-otp validating 6-digit numeric codes and issuing JWT tokens.
+[ ] Implement POST /auth/register storing seller profile with verificationStatus: "Pending".
+[ ] Implement POST /seller/orders/:id/invoice with duplicate prevention.
+[ ] Implement POST /seller/orders/:id/dispatch without mandatory E-Way Bill requirement.
+[ ] Implement Order Lifecycle status transitions: New ──▶ Confirmed ──▶ Processing ──▶ Ready for Dispatch ──▶ Dispatched ──▶ In Transit ──▶ Delivered ──▶ Completed.
+[ ] Implement POST /seller/orders/:id/pod to attach Proof of Delivery and mark Completed.
+[ ] Configure CORS for frontend origin and expose Authorization Bearer header.
+
+================================================================================
+END OF SPECIFICATION (FROZEN MASTER RELEASE)
+================================================================================

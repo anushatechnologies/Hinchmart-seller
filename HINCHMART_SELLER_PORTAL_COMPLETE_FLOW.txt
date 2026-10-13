@@ -1,0 +1,208 @@
+================================================================================
+HINCHMART B2B MARKETPLACE: SELLER PORTAL COMPLETE ARCHITECTURE & END-TO-END FLOW
+Date: September 9, 2026
+Module: Complete Seller User Journey, Data Flows, API Interactions & Governance
+Target: Backend Engineering & System Architecture Teams
+================================================================================
+
+1. OVERVIEW & SYSTEM ARCHITECTURE
+--------------------------------------------------------------------------------
+The HinchMart Seller Portal is a dedicated B2B seller platform designed for supplier
+onboarding, catalog management, inventory control, pricing tier configuration, and
+order management.
+
+Key Operational Principles:
+  1. Strict Seller Data Isolation: A seller only accesses and manages their own
+     products, categories, brands, and orders.
+  2. Live Backend Synchronization: All mutations dispatch directly to the live
+     REST backend (https://api.hinchmart.com).
+  3. Cloud Asset Storage: All product, category, and brand imagery is uploaded
+     directly to AWS S3.
+  4. Enterprise B2B Taxonomy: Strict 3-tier hierarchy (Category -> Subcategory -> Brand).
+
+
+================================================================================
+2. STEP-BY-STEP SELLER WORKFLOW
+================================================================================
+
+--------------------------------------------------------------------------------
+STEP 1: SELLER AUTHENTICATION & SESSION INGESTION
+--------------------------------------------------------------------------------
+Flow:
+  1. Seller logs in via phone number / password / OTP.
+  2. The frontend receives an auth payload containing:
+     - JWT Access Token
+     - Seller Profile (`id`, `sellerId`, `businessName`, `gstin`, `status`)
+  3. An Axios request interceptor attaches the following headers to EVERY outbound request:
+     - `Authorization: Bearer <JWT_TOKEN>`
+     - `X-Seller-Id: <SELLER_ID>` (e.g., '9')
+     - `Content-Type: application/json` (or `multipart/form-data` for uploads)
+
+
+--------------------------------------------------------------------------------
+STEP 2: IMAGE & ASSET UPLOAD FLOW (AWS S3)
+--------------------------------------------------------------------------------
+Flow:
+  1. User selects/drags image file in Category, Subcategory, Brand, or Product form.
+  2. Frontend validates file (max 5MB, format png/jpg/webp).
+  3. Frontend dispatches `POST /api/images/upload?type={products|categories|brands}`
+     with `FormData`:
+     - `file`: <Binary File>
+     - `folder`: "products" (or "categories", "brands")
+  4. Backend uploads to AWS S3 and returns `201 Created`:
+     ```json
+     {
+       "success": true,
+       "statusCode": 201,
+       "message": "Image uploaded successfully",
+       "data": {
+         "imageUrl": "https://hinchmart-storage-191481838776-ap-south-2-an.s3.ap-south-2.amazonaws.com/products/9fe53c8c-fc09-4fcb-b78b-6ba1280dd01e.png",
+         "fileUrl": "https://hinchmart-storage-191481838776-ap-south-2-an.s3.ap-south-2.amazonaws.com/products/9fe53c8c-fc09-4fcb-b78b-6ba1280dd01e.png",
+         "fileName": "item.png"
+       }
+     }
+     ```
+  5. The permanent S3 URL is attached to the form payload.
+
+
+--------------------------------------------------------------------------------
+STEP 3: 3-TIER CATALOG & TAXONOMY SETUP FLOW
+--------------------------------------------------------------------------------
+
+A. LEVEL 1: CATEGORY CREATION
+   1. Seller navigates to "Add Category" or enters a new category name.
+   2. Form collects: Category Name, Slug, Sort Order, Image URL (S3), Description.
+   3. Dispatches `POST /api/categories`.
+   4. Backend saves category with `active: true` and returns real DB `categoryId` (e.g., 69).
+   5. If category name already exists, frontend catches `409 Conflict`, queries
+      `GET /api/categories?search={name}`, and reuses the existing backend `categoryId`.
+
+B. LEVEL 2: SUBCATEGORY CREATION
+   1. Seller selects Parent Category (e.g., ID: 69 "Textile Colors & Dyes").
+   2. Form collects: Subcategory Name, Slug, Parent Category ID, Image URL (S3).
+   3. Dispatches `POST /api/subcategories`.
+   4. Backend persists subcategory linked to Parent Category with `active: true`
+      and returns real DB `subcategoryId` (e.g., 115).
+   5. Conflict resolution handles existing subcategory names gracefully.
+
+C. LEVEL 3: BRAND REGISTRATION
+   1. Seller selects Category + Subcategory.
+   2. Form collects: Brand Name, Slug, Category ID, Subcategory ID, Logo URL (S3).
+   3. Dispatches `POST /api/brands`.
+   4. Backend saves brand with `active: true` and returns real DB `brandId` (e.g., 275).
+
+
+--------------------------------------------------------------------------------
+STEP 4: MARKETPLACE PRODUCT CREATION & INGESTION FLOW
+--------------------------------------------------------------------------------
+Flow:
+  1. Seller opens "Add New Marketplace Product" screen.
+  2. Seller selects Category (69) -> Subcategory (115) -> Brand (275).
+  3. Seller enters Product Identity:
+     - Title: "ColorCraft Rose Pink Reactive Dye"
+     - URL Slug: "colorcraft-rose-pink-reactive-dye"
+     - SKU Code: "SKU-PINK-001"
+  4. Seller enters Commercials & Inventory:
+     - Selling Price: 850.00 (INR)
+     - MRP: 977.00 (INR)
+     - Unit of Measure: "KG"
+     - Minimum Order Quantity (MOQ): 5
+     - Available Stock Inventory: 100
+     - HSN Code: "3204"
+     - GST Rate: 18 (Parsed from "18% GST")
+     - 24-Hour Express Delivery: false
+  5. Seller attaches Product Image (Uploaded to AWS S3 in Step 2).
+  6. Seller enters Technical Description.
+  7. Form dispatches `POST /api/products` with payload:
+     ```json
+     {
+       "title": "ColorCraft Rose Pink Reactive Dye",
+       "name": "ColorCraft Rose Pink Reactive Dye",
+       "slug": "colorcraft-rose-pink-reactive-dye",
+       "sku": "SKU-PINK-001",
+       "description": "Premium industrial grade reactive dye for textile processing.",
+       "categoryId": 69,
+       "categoryName": "Textile Colors & Dyes",
+       "subcategoryId": 115,
+       "subcategoryName": "Pink Textile Colors",
+       "brandId": 275,
+       "brandName": "ColorCraft",
+       "brand": "ColorCraft",
+       "price": 850.0,
+       "sellingPrice": 850.0,
+       "mrp": 977.0,
+       "unit": "KG",
+       "moq": 5,
+       "stock": 100,
+       "stockQty": 100,
+       "hsn": "3204",
+       "hsnCode": "3204",
+       "gstRate": 18,
+       "gst": 18,
+       "is24HourDelivery": false,
+       "imageUrl": "https://...s3.amazonaws.com/...",
+       "images": ["https://...s3.amazonaws.com/..."],
+       "bulkPricingTiers": [],
+       "specifications": {},
+       "active": true,
+       "status": "PENDING",
+       "approvalStatus": "PENDING",
+       "sellerId": "9",
+       "vendorId": "9"
+     }
+     ```
+  8. Backend inserts record into database table `products` and returns `201 Created`
+     with `id: 790`.
+
+
+--------------------------------------------------------------------------------
+STEP 5: SELLER PORTAL PRODUCT LIST & INVENTORY MANAGEMENT
+--------------------------------------------------------------------------------
+Flow:
+  1. Seller visits `/seller/products`.
+  2. Frontend queries `GET /api/products?page=1&limit=100`.
+  3. Frontend filters products belonging to Seller ID '9'.
+  4. Seller can:
+     - Edit Price: `PUT /api/products/{id}`
+     - Update Stock: `PUT /api/products/{id}`
+     - Toggle Active / Inactive: `PUT /api/products/{id}`
+     - Delete Product: `DELETE /api/products/{id}`
+
+
+================================================================================
+3. DATA CONTRACT & TYPE CONVERSION RULES
+================================================================================
+
+To prevent Java Spring Boot deserialization errors, the Seller Portal strictly
+enforces the following data types:
+
+| Field Name | Frontend Source | Serialized JSON Type | Spring Boot Java Type | Constraints |
+| :--- | :--- | :--- | :--- | :--- |
+| `categoryId` | Dropdown selection | Number | `java.lang.Integer` | 32-bit int $\le 2147483647$ |
+| `subcategoryId` | Dropdown selection | Number | `java.lang.Integer` | 32-bit int $\le 2147483647$ |
+| `brandId` | Dropdown selection | Number | `java.lang.Integer` | 32-bit int $\le 2147483647$ |
+| `moq` | Number input | Number | `java.lang.Integer` | Positive int $\ge 1$ |
+| `stockQty` | Number input | Number | `java.lang.Integer` | Positive int $\ge 0$ |
+| `gstRate` | Select "18% GST" | Number (18) | `java.lang.Integer` | 0, 5, 12, 18, or 28 |
+| `price` | Currency input | Number (850.0) | `java.lang.Double` | Float / Double |
+| `mrp` | Calculated input | Number (977.0) | `java.lang.Double` | Float / Double |
+| `unit` | Select / text | String ("KG") | `java.lang.String` | Normalized upper-case |
+| `hsn` / `hsnCode`| Text input | String ("3204")| `java.lang.String` | Preserved as String |
+| `status` | Form state | String ("PENDING")| `java.lang.String` | Enum: PENDING, APPROVED |
+| `imageUrl` | S3 Upload | String (URL) | `java.lang.String` | Valid AWS HTTPS URL |
+
+
+================================================================================
+4. ADMIN PORTAL SYNC & LIFECYCLE GOVERNANCE
+================================================================================
+
+Lifecycle States:
+  1. [SELLER SUBMISSION] -> `POST /api/products` -> DB record created (e.g. ID: 790).
+  2. [PENDING REVIEW] -> Product saved with `status: "PENDING"`, `active: false`.
+  3. [ADMIN MODERATION] -> Admin reviews listing details & imagery.
+  4. [APPROVED & LIVE] -> Admin approves -> status becomes `APPROVED`, `active: true`.
+  5. [BUYER STOREFRONT] -> Product becomes visible on HinchMart buyer marketplace.
+
+================================================================================
+Report prepared by Seller Portal Frontend Engineering Team.
+================================================================================
