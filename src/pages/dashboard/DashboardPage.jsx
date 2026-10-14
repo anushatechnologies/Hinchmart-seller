@@ -198,67 +198,67 @@ export function DashboardPage() {
   return (
     <div className="space-y-6">
       {/* 1. TOP HEADER: Business Control Center Banner with Glassmorphism Effect */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-white/95 via-slate-50/90 to-emerald-50/50 rounded-2xl p-6 sm:p-7 shadow-lg shadow-emerald-950/5 border border-slate-200/90 backdrop-blur-xl">
+      <div className="relative overflow-hidden bg-gradient-to-br from-white/95 via-slate-50/90 to-emerald-50/50 rounded-xl sm:rounded-2xl p-4 sm:p-7 shadow-sm shadow-emerald-950/5 border border-slate-200/90 backdrop-blur-xl">
         {/* Ambient Aurora Glow Orbs */}
         <div className="absolute -top-20 -right-20 w-80 h-80 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-20 -left-20 w-80 h-80 bg-orange-500/10 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute top-1/2 left-1/3 w-64 h-64 bg-teal-400/10 rounded-full blur-2xl pointer-events-none" />
         <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-500/20 to-transparent" />
 
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-5">
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4 sm:gap-5">
           <div>
-            <div className="flex flex-wrap items-center gap-2 mb-2.5">
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-black bg-gradient-to-r from-orange-500 to-amber-500 text-white uppercase tracking-wider shadow-xs">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-2 sm:mb-2.5">
+              <span className="px-2 sm:px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-black bg-gradient-to-r from-orange-500 to-amber-500 text-white uppercase tracking-wider shadow-xs">
                 Control Center
               </span>
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-500/10 text-emerald-800 border border-emerald-500/25 inline-flex items-center gap-1.5 backdrop-blur-xs">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" /> GST & Enterprise Verified
+              <span className="px-2 sm:px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold bg-emerald-500/10 text-emerald-800 border border-emerald-500/25 inline-flex items-center gap-1 backdrop-blur-xs">
+                <ShieldCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-600" /> GST & Enterprise Verified
               </span>
-              <span className="text-slate-500 text-xs flex items-center gap-1.5 font-medium hidden sm:inline-flex bg-white/80 border border-slate-200/80 px-2.5 py-0.5 rounded-full shadow-2xs">
+              <span className="text-slate-500 text-xs items-center gap-1.5 font-medium hidden sm:inline-flex bg-white/80 border border-slate-200/80 px-2.5 py-0.5 rounded-full shadow-2xs">
                 <Calendar className="w-3.5 h-3.5 text-slate-400" /> {new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
               </span>
             </div>
 
-            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight flex flex-wrap items-center gap-2">
+            <h1 className="text-xl sm:text-3xl font-extrabold tracking-tight flex flex-wrap items-center gap-1.5 sm:gap-2">
               <span className="text-slate-800 font-extrabold">
                 {getGreeting()},
               </span>
               <span className="bg-gradient-to-r from-emerald-600 via-teal-500 to-orange-500 bg-clip-text text-transparent animate-text-gradient font-black">
                 {profile?.name || profile?.fullName || user?.name || user?.fullName || 'Authorized Seller'}
               </span>
-              <span className="animate-wave inline-block text-2xl sm:text-3xl select-none" role="img" aria-label="waving hand">
+              <span className="animate-wave inline-block text-xl sm:text-3xl select-none" role="img" aria-label="waving hand">
                 👋
               </span>
             </h1>
 
-            <p className="text-xs sm:text-sm text-slate-600 mt-2 max-w-2xl font-normal leading-relaxed flex flex-wrap items-center gap-1.5">
+            <p className="text-xs sm:text-sm text-slate-600 mt-1 sm:mt-2 max-w-2xl font-normal leading-relaxed flex flex-wrap items-center gap-1.5">
               <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200/80 font-bold shadow-2xs">
                 {profile?.companyName || user?.companyName || 'Registered Enterprise'}
               </span>
-              <span className="text-slate-400">•</span>
-              <span>Real-time overview of sales volume, material orders, customer RFQs, and warehouse stock levels.</span>
+              <span className="text-slate-400 hidden sm:inline">•</span>
+              <span className="hidden sm:inline">Real-time overview of sales volume, material orders, customer RFQs, and warehouse stock levels.</span>
             </p>
           </div>
 
           {/* Quick Header Actions */}
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0 pt-2 lg:pt-0">
-            <Link to="/seller/quotations/create">
+          <div className="flex items-center gap-2 shrink-0 pt-1 lg:pt-0">
+            <Link to="/seller/quotations/create" className="flex-1 sm:flex-initial">
               <Button
                 variant="primary"
-                size="md"
+                size="sm"
                 leftIcon={FileText}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm shadow-emerald-600/20 hover:shadow-md transition-all rounded-xl"
+                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm shadow-emerald-600/20 hover:shadow-md transition-all rounded-lg sm:rounded-xl text-xs sm:text-sm"
               >
                 New Quotation
               </Button>
             </Link>
 
-            <Link to="/seller/products/labels">
+            <Link to="/seller/products/labels" className="flex-1 sm:flex-initial">
               <Button
                 variant="secondary"
-                size="md"
+                size="sm"
                 leftIcon={QrCode}
-                className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 hover:border-slate-300 font-semibold shadow-2xs hover:shadow-xs transition-all rounded-xl"
+                className="w-full bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 hover:border-slate-300 font-semibold shadow-2xs hover:shadow-xs transition-all rounded-lg sm:rounded-xl text-xs sm:text-sm"
               >
                 Create Label
               </Button>
@@ -267,31 +267,31 @@ export function DashboardPage() {
         </div>
       </div>
 
-      {/* 2. TOP KPI METRIC CARDS (6 Business Performance Cards - Fully Clickable) */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-3.5 sm:gap-4">
+      {/* 2. TOP KPI METRIC CARDS (6 Business Performance Cards - 2 Columns on Mobile, 6 on Desktop) */}
+      <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2.5 sm:gap-4">
         {/* Total Sales -> Analytics */}
         <Link
           to="/seller/analytics"
-          className="h-full min-h-[124px] bg-white rounded-xl p-4 border border-slate-200/90 shadow-2xs hover:shadow-md hover:border-emerald-300 hover:-translate-y-0.5 transition-all duration-200 ease-out flex flex-col justify-between cursor-pointer group"
+          className="h-full min-h-[110px] sm:min-h-[124px] bg-white rounded-xl p-3 sm:p-4 border border-slate-200/90 shadow-2xs hover:shadow-md hover:border-emerald-300 hover:-translate-y-0.5 transition-all duration-200 ease-out flex flex-col justify-between cursor-pointer group"
           title="View Revenue Reports & Analytics"
         >
-          <div className="flex items-start justify-between">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider group-hover:text-emerald-700 transition-colors">
+          <div className="flex items-start justify-between gap-1">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider group-hover:text-emerald-700 transition-colors truncate">
               Total Sales
             </span>
-            <div className="p-2 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-200/80 group-hover:bg-emerald-100 group-hover:scale-105 transition-all duration-200">
-              <IndianRupee className="w-4 h-4" />
+            <div className="p-1.5 sm:p-2 rounded-lg bg-emerald-50 text-emerald-600 border border-emerald-200/80 group-hover:bg-emerald-100 group-hover:scale-105 transition-all duration-200 shrink-0">
+              <IndianRupee className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
-          <div className="mt-2">
-            <div className="text-xl sm:text-[22px] font-black text-slate-900 tracking-tight group-hover:text-emerald-700 transition-colors">
+          <div className="mt-1.5 sm:mt-2">
+            <div className="text-lg sm:text-[22px] font-black text-slate-900 tracking-tight group-hover:text-emerald-700 transition-colors truncate">
               {formatCurrency(kpis.totalRevenue || 0)}
             </div>
-            <div className="mt-1 flex items-center justify-between text-[11px]">
+            <div className="mt-1 flex items-center justify-between text-[10px] sm:text-[11px]">
               <span className="text-emerald-600 font-bold flex items-center gap-0.5">
-                <TrendingUp className="w-3.5 h-3.5" /> Live
+                <TrendingUp className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> Live
               </span>
-              <span className="text-slate-400 font-medium">Reports →</span>
+              <span className="text-slate-400 font-medium hidden sm:inline">Reports →</span>
             </div>
           </div>
         </Link>
@@ -299,26 +299,26 @@ export function DashboardPage() {
         {/* Total Orders -> Orders */}
         <Link
           to="/seller/orders"
-          className="h-full min-h-[124px] bg-white rounded-xl p-4 border border-slate-200/90 shadow-2xs hover:shadow-md hover:border-blue-300 hover:-translate-y-0.5 transition-all duration-200 ease-out flex flex-col justify-between cursor-pointer group"
+          className="h-full min-h-[110px] sm:min-h-[124px] bg-white rounded-xl p-3 sm:p-4 border border-slate-200/90 shadow-2xs hover:shadow-md hover:border-blue-300 hover:-translate-y-0.5 transition-all duration-200 ease-out flex flex-col justify-between cursor-pointer group"
           title="View Order Fulfillment Board"
         >
-          <div className="flex items-start justify-between">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider group-hover:text-blue-700 transition-colors">
+          <div className="flex items-start justify-between gap-1">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider group-hover:text-blue-700 transition-colors truncate">
               Total Orders
             </span>
-            <div className="p-2 rounded-lg bg-blue-50 text-blue-600 border border-blue-200/80 group-hover:bg-blue-100 group-hover:scale-105 transition-all duration-200">
-              <ShoppingCart className="w-4 h-4" />
+            <div className="p-1.5 sm:p-2 rounded-lg bg-blue-50 text-blue-600 border border-blue-200/80 group-hover:bg-blue-100 group-hover:scale-105 transition-all duration-200 shrink-0">
+              <ShoppingCart className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
-          <div className="mt-2">
-            <div className="text-xl sm:text-[22px] font-black text-slate-900 tracking-tight group-hover:text-blue-700 transition-colors">
+          <div className="mt-1.5 sm:mt-2">
+            <div className="text-lg sm:text-[22px] font-black text-slate-900 tracking-tight group-hover:text-blue-700 transition-colors">
               {kpis.totalOrders ?? orders.length}
             </div>
-            <div className="mt-1 flex items-center justify-between text-[11px]">
-              <span className="text-blue-600 font-bold flex items-center gap-0.5">
-                <TrendingUp className="w-3.5 h-3.5" /> Real-time
+            <div className="mt-1 flex items-center justify-between text-[10px] sm:text-[11px]">
+              <span className="text-blue-600 font-bold flex items-center gap-0.5 truncate">
+                <TrendingUp className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> Real-time
               </span>
-              <span className="text-amber-600 font-semibold">{kpis.pendingOrders || orders.filter(o => o.orderStatus === 'Pending' || o.status === 'Pending').length} Pending</span>
+              <span className="text-amber-600 font-semibold truncate ml-1">{kpis.pendingOrders || orders.filter(o => o.orderStatus === 'Pending' || o.status === 'Pending').length} Pending</span>
             </div>
           </div>
         </Link>
@@ -326,24 +326,24 @@ export function DashboardPage() {
         {/* Total Products -> Products */}
         <Link
           to="/seller/products"
-          className="h-full min-h-[124px] bg-white rounded-xl p-4 border border-slate-200/90 shadow-2xs hover:shadow-md hover:border-amber-300 hover:-translate-y-0.5 transition-all duration-200 ease-out flex flex-col justify-between cursor-pointer group"
+          className="h-full min-h-[110px] sm:min-h-[124px] bg-white rounded-xl p-3 sm:p-4 border border-slate-200/90 shadow-2xs hover:shadow-md hover:border-amber-300 hover:-translate-y-0.5 transition-all duration-200 ease-out flex flex-col justify-between cursor-pointer group"
           title="Manage Product Catalog"
         >
-          <div className="flex items-start justify-between">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider group-hover:text-amber-700 transition-colors">
+          <div className="flex items-start justify-between gap-1">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider group-hover:text-amber-700 transition-colors truncate">
               Catalog Items
             </span>
-            <div className="p-2 rounded-lg bg-amber-50 text-amber-600 border border-amber-200/80 group-hover:bg-amber-100 group-hover:scale-105 transition-all duration-200">
-              <Package className="w-4 h-4" />
+            <div className="p-1.5 sm:p-2 rounded-lg bg-amber-50 text-amber-600 border border-amber-200/80 group-hover:bg-amber-100 group-hover:scale-105 transition-all duration-200 shrink-0">
+              <Package className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
-          <div className="mt-2">
-            <div className="text-xl sm:text-[22px] font-black text-slate-900 tracking-tight group-hover:text-amber-700 transition-colors">
+          <div className="mt-1.5 sm:mt-2">
+            <div className="text-lg sm:text-[22px] font-black text-slate-900 tracking-tight group-hover:text-amber-700 transition-colors">
               {kpis.totalProducts ?? products.length}
             </div>
-            <div className="mt-1 flex items-center justify-between text-[11px]">
-              <span className="text-emerald-600 font-bold">{products.length} registered</span>
-              <span className="text-slate-500 font-medium">{kpis.activeProducts ?? products.filter(p => p.status === 'Active' || p.active).length} Live</span>
+            <div className="mt-1 flex items-center justify-between text-[10px] sm:text-[11px]">
+              <span className="text-emerald-600 font-bold truncate">{products.length} registered</span>
+              <span className="text-slate-500 font-medium truncate ml-1">{kpis.activeProducts ?? products.filter(p => p.status === 'Active' || p.active).length} Live</span>
             </div>
           </div>
         </Link>
@@ -351,24 +351,24 @@ export function DashboardPage() {
         {/* Active Customers -> Customers */}
         <Link
           to="/seller/customers"
-          className="h-full min-h-[124px] bg-white rounded-xl p-4 border border-slate-200/90 shadow-2xs hover:shadow-md hover:border-purple-300 hover:-translate-y-0.5 transition-all duration-200 ease-out flex flex-col justify-between cursor-pointer group"
+          className="h-full min-h-[110px] sm:min-h-[124px] bg-white rounded-xl p-3 sm:p-4 border border-slate-200/90 shadow-2xs hover:shadow-md hover:border-purple-300 hover:-translate-y-0.5 transition-all duration-200 ease-out flex flex-col justify-between cursor-pointer group"
           title="Manage Customer Directory"
         >
-          <div className="flex items-start justify-between">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider group-hover:text-purple-700 transition-colors">
+          <div className="flex items-start justify-between gap-1">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider group-hover:text-purple-700 transition-colors truncate">
               Customers
             </span>
-            <div className="p-2 rounded-lg bg-purple-50 text-purple-600 border border-purple-200/80 group-hover:bg-purple-100 group-hover:scale-105 transition-all duration-200">
-              <Building2 className="w-4 h-4" />
+            <div className="p-1.5 sm:p-2 rounded-lg bg-purple-50 text-purple-600 border border-purple-200/80 group-hover:bg-purple-100 group-hover:scale-105 transition-all duration-200 shrink-0">
+              <Building2 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
-          <div className="mt-2">
-            <div className="text-xl sm:text-[22px] font-black text-slate-900 tracking-tight group-hover:text-purple-700 transition-colors">
+          <div className="mt-1.5 sm:mt-2">
+            <div className="text-lg sm:text-[22px] font-black text-slate-900 tracking-tight group-hover:text-purple-700 transition-colors">
               {customers.length}
             </div>
-            <div className="mt-1 flex items-center justify-between text-[11px]">
-              <span className="text-purple-600 font-bold">{customers.length} enrolled</span>
-              <span className="text-slate-400 font-medium">Directory →</span>
+            <div className="mt-1 flex items-center justify-between text-[10px] sm:text-[11px]">
+              <span className="text-purple-600 font-bold truncate">{customers.length} enrolled</span>
+              <span className="text-slate-400 font-medium hidden sm:inline">Directory →</span>
             </div>
           </div>
         </Link>
@@ -376,24 +376,24 @@ export function DashboardPage() {
         {/* Low Stock Alerts -> Inventory */}
         <Link
           to="/seller/inventory/low-stock"
-          className="h-full min-h-[124px] bg-white rounded-xl p-4 border border-slate-200/90 shadow-2xs hover:shadow-md hover:border-rose-300 hover:-translate-y-0.5 transition-all duration-200 ease-out flex flex-col justify-between cursor-pointer group"
+          className="h-full min-h-[110px] sm:min-h-[124px] bg-white rounded-xl p-3 sm:p-4 border border-slate-200/90 shadow-2xs hover:shadow-md hover:border-rose-300 hover:-translate-y-0.5 transition-all duration-200 ease-out flex flex-col justify-between cursor-pointer group"
           title="View Low Stock Items"
         >
-          <div className="flex items-start justify-between">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider group-hover:text-rose-700 transition-colors">
+          <div className="flex items-start justify-between gap-1">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider group-hover:text-rose-700 transition-colors truncate">
               Low Stock
             </span>
-            <div className="p-2 rounded-lg bg-rose-50 text-rose-600 border border-rose-200/80 group-hover:bg-rose-100 group-hover:scale-105 transition-all duration-200">
-              <AlertTriangle className="w-4 h-4" />
+            <div className="p-1.5 sm:p-2 rounded-lg bg-rose-50 text-rose-600 border border-rose-200/80 group-hover:bg-rose-100 group-hover:scale-105 transition-all duration-200 shrink-0">
+              <AlertTriangle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
-          <div className="mt-2">
-            <div className="text-xl sm:text-[22px] font-black text-rose-600 tracking-tight flex items-center gap-1">
-              {lowStockItems.length} <span className="text-xs font-normal text-slate-500">Items</span>
+          <div className="mt-1.5 sm:mt-2">
+            <div className="text-lg sm:text-[22px] font-black text-rose-600 tracking-tight flex items-center gap-1">
+              {lowStockItems.length} <span className="text-[10px] sm:text-xs font-normal text-slate-500">Items</span>
             </div>
-            <div className="mt-1 flex items-center justify-between text-[11px]">
-              <span className="text-rose-600 font-bold">{lowStockItems.length > 0 ? 'Action Needed' : 'Healthy'}</span>
-              <span className="text-amber-600 font-semibold group-hover:underline">
+            <div className="mt-1 flex items-center justify-between text-[10px] sm:text-[11px]">
+              <span className="text-rose-600 font-bold truncate">{lowStockItems.length > 0 ? 'Action Needed' : 'Healthy'}</span>
+              <span className="text-amber-600 font-semibold group-hover:underline truncate ml-1">
                 Restock →
               </span>
             </div>
@@ -403,24 +403,24 @@ export function DashboardPage() {
         {/* Pending RFQs -> Enquiries */}
         <Link
           to="/seller/enquiries"
-          className="h-full min-h-[124px] bg-white rounded-xl p-4 border border-slate-200/90 shadow-2xs hover:shadow-md hover:border-indigo-300 hover:-translate-y-0.5 transition-all duration-200 ease-out flex flex-col justify-between cursor-pointer group"
+          className="h-full min-h-[110px] sm:min-h-[124px] bg-white rounded-xl p-3 sm:p-4 border border-slate-200/90 shadow-2xs hover:shadow-md hover:border-indigo-300 hover:-translate-y-0.5 transition-all duration-200 ease-out flex flex-col justify-between cursor-pointer group"
           title="Review Pending Buyer RFQs"
         >
-          <div className="flex items-start justify-between">
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider group-hover:text-indigo-700 transition-colors">
+          <div className="flex items-start justify-between gap-1">
+            <span className="text-[10px] sm:text-[11px] font-bold text-slate-500 uppercase tracking-wider group-hover:text-indigo-700 transition-colors truncate">
               Pending RFQs
             </span>
-            <div className="p-2 rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-200/80 group-hover:bg-indigo-100 group-hover:scale-105 transition-all duration-200">
-              <HelpCircle className="w-4 h-4" />
+            <div className="p-1.5 sm:p-2 rounded-lg bg-indigo-50 text-indigo-600 border border-indigo-200/80 group-hover:bg-indigo-100 group-hover:scale-105 transition-all duration-200 shrink-0">
+              <HelpCircle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
           </div>
-          <div className="mt-2">
-            <div className="text-xl sm:text-[22px] font-black text-slate-900 tracking-tight group-hover:text-indigo-700 transition-colors">
+          <div className="mt-1.5 sm:mt-2">
+            <div className="text-lg sm:text-[22px] font-black text-slate-900 tracking-tight group-hover:text-indigo-700 transition-colors">
               {enquiries.length}
             </div>
-            <div className="mt-1 flex items-center justify-between text-[11px]">
-              <span className="text-indigo-600 font-bold">{kpis.newEnquiries || enquiries.filter(e => e.status === 'New').length} Unquoted</span>
-              <span className="text-amber-600 font-semibold group-hover:underline">
+            <div className="mt-1 flex items-center justify-between text-[10px] sm:text-[11px]">
+              <span className="text-indigo-600 font-bold truncate">{kpis.newEnquiries || enquiries.filter(e => e.status === 'New').length} Unquoted</span>
+              <span className="text-amber-600 font-semibold group-hover:underline truncate ml-1">
                 Reply →
               </span>
             </div>
@@ -488,7 +488,7 @@ export function DashboardPage() {
             </div>
 
             {/* Product Cards Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3.5">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3.5">
               {products.slice(0, 4).map((product) => {
                 const isOutOfStock = (product.stock || 0) === 0;
                 const isLowStock =
@@ -534,7 +534,7 @@ export function DashboardPage() {
                       </div>
                     </div>
 
-                    <div className="p-3.5 flex flex-col justify-between flex-1">
+                    <div className="p-2.5 sm:p-3.5 flex flex-col justify-between flex-1">
                       <div>
                         {/* Title & Brand */}
                         <h4 className="text-xs font-bold text-slate-900 group-hover:text-emerald-700 transition-colors line-clamp-2 leading-snug">
@@ -603,23 +603,23 @@ export function DashboardPage() {
             </div>
 
             {/* Performance Summary Pill Stats */}
-            <div className="grid grid-cols-3 gap-2 my-4 p-3 bg-slate-50 rounded-xl border border-slate-100 text-center">
-              <div>
-                <span className="text-[10px] text-slate-400 uppercase font-bold block">Avg Order Value</span>
-                <span className="text-xs sm:text-sm font-extrabold text-slate-900">
+            <div className="grid grid-cols-3 gap-1.5 sm:gap-2 my-3 sm:my-4 p-2 sm:p-3 bg-slate-50 rounded-xl border border-slate-100 text-center">
+              <div className="min-w-0">
+                <span className="text-[9px] sm:text-[10px] text-slate-400 uppercase font-bold block truncate">Avg Order</span>
+                <span className="text-[11px] sm:text-sm font-extrabold text-slate-900 truncate block">
                   {formatCurrency(kpis.averageOrderValue || 0)}
                 </span>
               </div>
-              <div>
-                <span className="text-[10px] text-slate-400 uppercase font-bold block">RFQ Conversion</span>
-                <span className="text-xs sm:text-sm font-extrabold text-emerald-600">
+              <div className="min-w-0">
+                <span className="text-[9px] sm:text-[10px] text-slate-400 uppercase font-bold block truncate">Conversion</span>
+                <span className="text-[11px] sm:text-sm font-extrabold text-emerald-600 truncate block">
                   {kpis.conversionRate || 0}%
                 </span>
               </div>
-              <div>
-                <span className="text-[10px] text-slate-400 uppercase font-bold block">Daily Velocity</span>
-                <span className="text-xs sm:text-sm font-extrabold text-amber-600">
-                  {formatCurrency((kpis.totalRevenue || 0) / 30)} / day
+              <div className="min-w-0">
+                <span className="text-[9px] sm:text-[10px] text-slate-400 uppercase font-bold block truncate">Daily Run</span>
+                <span className="text-[11px] sm:text-sm font-extrabold text-amber-600 truncate block">
+                  {formatCurrency((kpis.totalRevenue || 0) / 30)}
                 </span>
               </div>
             </div>
