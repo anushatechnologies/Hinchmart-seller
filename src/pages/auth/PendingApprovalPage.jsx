@@ -229,21 +229,21 @@ export function PendingApprovalPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] py-12 px-4 sm:px-6 lg:px-8 relative overflow-hidden flex flex-col justify-center items-center">
+    <div className="min-h-screen bg-[#F8FAFC] py-8 sm:py-12 px-3.5 sm:px-6 lg:px-8 relative overflow-hidden flex flex-col justify-center items-center">
       {/* Background Decorative Blobs */}
       <div className="absolute -top-32 -left-32 w-96 h-96 bg-amber-500/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute -bottom-32 -right-32 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
 
       <div className="max-w-xl w-full relative z-10">
         {/* Header Logo */}
-        <div className="text-center mb-6">
-          <div className="flex justify-center mb-4">
+        <div className="text-center mb-5 sm:mb-6">
+          <div className="flex justify-center mb-3 sm:mb-4">
             <BrandLogo size="login" theme="light" to="/" />
           </div>
         </div>
 
         {/* Main Card */}
-        <div className="bg-white rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/50 p-6 sm:p-8 text-center space-y-6">
+        <div className="bg-white rounded-2xl sm:rounded-3xl border border-slate-200 shadow-xl shadow-slate-200/50 p-4 sm:p-8 text-center space-y-5 sm:space-y-6">
           {/* Status Icon */}
           <div className="relative mx-auto w-20 h-20">
             {approvalStatus === 'APPROVED' ? (

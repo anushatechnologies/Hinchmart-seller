@@ -98,6 +98,8 @@ export function Sidebar() {
     setOpenMenus((prev) => ({ ...prev, [title]: !prev[title] }));
   };
 
+  const isExpanded = sidebarOpen || mobileMenuOpen;
+
   return (
     <>
       {/* Mobile Drawer Backdrop */}
@@ -121,9 +123,9 @@ export function Sidebar() {
         {/* Brand Header */}
         <div className={cn(
           'flex h-16 shrink-0 items-center border-b border-slate-800/80 bg-[#0B132B] transition-all',
-          sidebarOpen ? 'justify-between pl-3 pr-2' : 'justify-center px-2'
+          isExpanded ? 'justify-between pl-3 pr-2' : 'justify-center px-2'
         )}>
-          {sidebarOpen ? (
+          {isExpanded ? (
             <>
               <div className="flex items-center overflow-hidden">
                 <BrandLogo size="sidebar" theme="dark" to="/seller/dashboard" showBadge={true} badgeText="SELLER WEB HUB" />
@@ -171,7 +173,7 @@ export function Sidebar() {
           {NAV_GROUPS.map((navGroup) => (
             <div key={navGroup.group} className="space-y-1">
               {/* Group Heading */}
-              {sidebarOpen && (
+              {isExpanded && (
                 <div className="px-3 pt-3 pb-1 text-[10px] font-bold uppercase tracking-wider text-slate-400/80">
                   {navGroup.group}
                 </div>
@@ -197,7 +199,7 @@ export function Sidebar() {
                           className={({ isActive }) =>
                             cn(
                               'flex flex-1 items-center text-xs font-medium rounded-lg transition-all text-left group cursor-pointer py-2',
-                              sidebarOpen ? 'justify-between px-3' : 'justify-center px-0',
+                              isExpanded ? 'justify-between px-3' : 'justify-center px-0',
                               isActive
                                 ? 'text-white bg-slate-800/90 border border-slate-700 font-semibold'
                                 : isChildActive
@@ -205,9 +207,9 @@ export function Sidebar() {
                                 : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
                             )
                           }
-                          title={!sidebarOpen ? item.title : undefined}
+                          title={!isExpanded ? item.title : undefined}
                         >
-                          <div className={cn('flex items-center min-w-0', sidebarOpen ? 'gap-2.5' : 'justify-center')}>
+                          <div className={cn('flex items-center min-w-0', isExpanded ? 'gap-2.5' : 'justify-center')}>
                             <Icon
                               className={cn(
                                 'w-4 h-4 shrink-0 transition-colors',
@@ -216,10 +218,10 @@ export function Sidebar() {
                                   : 'text-slate-400 group-hover:text-slate-200'
                               )}
                             />
-                            {sidebarOpen && <span className="truncate">{item.title}</span>}
+                            {isExpanded && <span className="truncate">{item.title}</span>}
                           </div>
 
-                          {sidebarOpen && (
+                          {isExpanded && (
                             <div className="flex items-center gap-1.5 shrink-0">
                               {badgeCount > 0 && (
                                 <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-600 text-white shadow-xs">
@@ -247,7 +249,7 @@ export function Sidebar() {
                         </NavLink>
                       </div>
 
-                      {isMenuOpen && sidebarOpen && (
+                      {isMenuOpen && isExpanded && (
                         <div className="pl-3.5 py-1 space-y-1 border-l border-slate-800 ml-5 my-1">
                           {item.children.map((child) => {
                             const ChildIcon = child.icon ? ICON_MAP[child.icon] : null;
@@ -287,27 +289,27 @@ export function Sidebar() {
                     className={({ isActive }) =>
                       cn(
                         'flex items-center text-xs font-medium rounded-lg transition-all group py-2',
-                        sidebarOpen ? 'justify-between px-3' : 'justify-center px-0',
+                        isExpanded ? 'justify-between px-3' : 'justify-center px-0',
                         isActive
                           ? 'border border-orange-500/90 bg-orange-500/15 text-white font-semibold shadow-xs'
                           : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
                       )
                     }
-                    title={!sidebarOpen ? item.title : undefined}
+                    title={!isExpanded ? item.title : undefined}
                   >
                     {({ isActive }) => (
                       <>
-                        <div className={cn('flex items-center min-w-0', sidebarOpen ? 'gap-2.5' : 'justify-center')}>
+                        <div className={cn('flex items-center min-w-0', isExpanded ? 'gap-2.5' : 'justify-center')}>
                           <Icon
                             className={cn(
                               'w-4 h-4 shrink-0 transition-colors',
                               isActive ? 'text-orange-400' : 'text-slate-400 group-hover:text-slate-200'
                             )}
                           />
-                          {sidebarOpen && <span className="truncate">{item.title}</span>}
+                          {isExpanded && <span className="truncate">{item.title}</span>}
                         </div>
 
-                        {sidebarOpen && badgeCount > 0 && (
+                        {isExpanded && badgeCount > 0 && (
                           <span
                             className={cn(
                               'px-1.5 py-0.5 rounded-full text-[10px] font-bold shrink-0',
@@ -330,16 +332,17 @@ export function Sidebar() {
         <div className="shrink-0 p-3 border-t border-slate-800/80 bg-[#091024] space-y-2">
           <NavLink
             to="/seller/company/verification"
+            onClick={() => setMobileMenuOpen(false)}
             className={cn(
               'flex items-center p-2 rounded-lg bg-slate-800/50 border border-slate-700/60 hover:border-orange-500/40 transition-all group shadow-sm',
-              sidebarOpen ? 'gap-2.5' : 'justify-center'
+              isExpanded ? 'gap-2.5' : 'justify-center'
             )}
             title="GST & MSME Compliant"
           >
             <div className="w-7 h-7 rounded-md bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shrink-0">
               <ShieldCheck className="w-4 h-4" />
             </div>
-            {sidebarOpen && (
+            {isExpanded && (
               <div className="min-w-0 flex-1">
                 <p className="text-[11px] font-bold text-slate-200 group-hover:text-orange-400 transition-colors">
                   Verified B2B Seller
@@ -352,17 +355,18 @@ export function Sidebar() {
           <button
             type="button"
             onClick={async () => {
+              setMobileMenuOpen(false);
               await useAuthStore.getState().logout();
               window.location.href = '/login';
             }}
             className={cn(
               'flex w-full items-center py-2 text-xs font-semibold text-slate-400 hover:text-rose-400 hover:bg-rose-950/30 rounded-lg border border-slate-800/80 hover:border-rose-900/50 transition-all cursor-pointer',
-              sidebarOpen ? 'gap-2.5 px-3' : 'justify-center px-0'
+              isExpanded ? 'gap-2.5 px-3' : 'justify-center px-0'
             )}
             title="Sign Out"
           >
             <LogOut className="w-4 h-4 shrink-0 text-slate-400 group-hover:text-rose-400" />
-            {sidebarOpen && <span>Sign Out</span>}
+            {isExpanded && <span>Sign Out</span>}
           </button>
         </div>
       </aside>

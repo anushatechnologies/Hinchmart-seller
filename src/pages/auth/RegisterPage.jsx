@@ -860,18 +860,18 @@ export function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-[#F9FAFB] py-10 px-4 sm:px-6 lg:px-8 relative overflow-hidden font-sans">
+    <div className="min-h-screen bg-[#F9FAFB] py-6 sm:py-10 px-3 sm:px-6 lg:px-8 relative overflow-hidden font-sans">
       {/* Background Ambient Glow */}
       <div className="absolute -top-24 -right-24 w-96 h-96 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
       <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-orange-500/10 rounded-full blur-3xl pointer-events-none" />
 
       <div className="max-w-2xl mx-auto relative z-10">
         {/* Top Header */}
-        <div className="text-center mb-8">
-          <div className="flex justify-center mb-5">
+        <div className="text-center mb-6 sm:mb-8">
+          <div className="flex justify-center mb-4 sm:mb-5">
             <BrandLogo size="login" theme="light" to="/" />
           </div>
-          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+          <h1 className="text-xl sm:text-3xl font-black text-slate-900 tracking-tight">
             Seller Business Registration
           </h1>
           <p className="mt-1 text-xs text-slate-500">
@@ -881,13 +881,13 @@ export function RegisterPage() {
 
         {/* STEPPER PROGRESS BAR */}
         {currentStep <= 4 && (
-          <div className="mb-8 bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm">
-            <div className="grid grid-cols-4 gap-1.5 sm:gap-2 text-center text-xs font-bold">
+          <div className="mb-5 sm:mb-8 bg-white p-2.5 sm:p-4 rounded-2xl border border-slate-200 shadow-sm">
+            <div className="grid grid-cols-4 gap-1 sm:gap-2 text-center text-xs font-bold">
               {[
-                { step: 1, label: '1. Personal' },
-                { step: 2, label: '2. Business & Tax' },
-                { step: 3, label: '3. Bank & Settlement' },
-                { step: 4, label: '4. Documents' },
+                { step: 1, label: '1. Personal', shortLabel: '1. KYC' },
+                { step: 2, label: '2. Business & Tax', shortLabel: '2. Tax' },
+                { step: 3, label: '3. Bank & Settlement', shortLabel: '3. Bank' },
+                { step: 4, label: '4. Documents', shortLabel: '4. Docs' },
               ].map((s) => {
                 const isActive = currentStep === s.step;
                 const isCompleted = currentStep > s.step;
@@ -908,8 +908,9 @@ export function RegisterPage() {
                     }`}
                   >
                     <div className="flex items-center justify-center gap-1">
-                      {isCompleted && <Check className="w-3.5 h-3.5" />}
-                      <span className="truncate">{s.label}</span>
+                      {isCompleted && <Check className="w-3.5 h-3.5 shrink-0" />}
+                      <span className="hidden sm:inline truncate">{s.label}</span>
+                      <span className="sm:hidden text-[11px] font-black truncate">{s.shortLabel}</span>
                     </div>
                   </button>
                 );
@@ -919,7 +920,7 @@ export function RegisterPage() {
         )}
 
         {/* Main Card Container */}
-        <div className="bg-white/95 backdrop-blur-xl p-6 sm:p-8 rounded-2xl shadow-xl shadow-slate-900/5 border border-slate-200 text-left animate-in fade-in zoom-in-95 duration-200">
+        <div className="bg-white/95 backdrop-blur-xl p-4 sm:p-8 rounded-2xl shadow-xl shadow-slate-900/5 border border-slate-200 text-left animate-in fade-in zoom-in-95 duration-200">
           
           {/* ========================================================================= */}
           {/* STEP 1: PERSONAL & KYC DETAILS + FIREBASE CREDENTIALS */}
@@ -1971,11 +1972,11 @@ export function RegisterPage() {
                 </p>
               </div>
 
-              <div className="pt-3 flex items-center gap-3 border-t border-slate-100">
+              <div className="pt-3 flex flex-col-reverse sm:flex-row items-center gap-2.5 sm:gap-3 border-t border-slate-100">
                 <button
                   type="button"
                   onClick={() => setCurrentStep(3)}
-                  className="w-1/3 py-3 px-4 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                  className="w-full sm:w-1/3 py-3 px-4 bg-slate-50 hover:bg-slate-100 text-slate-700 font-bold text-xs sm:text-sm rounded-xl border border-slate-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
                 >
                   <ArrowLeft className="w-4 h-4" />
                   <span>Back</span>
@@ -1984,7 +1985,7 @@ export function RegisterPage() {
                   type="button"
                   onClick={handleFinalSubmit}
                   disabled={isLoading || stepLoading === 4}
-                  className="w-2/3 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold text-sm rounded-xl shadow-md shadow-emerald-600/20 hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70"
+                  className="w-full sm:w-2/3 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md shadow-emerald-600/20 hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70"
                 >
                   {isLoading || stepLoading === 4 ? (
                     <>
