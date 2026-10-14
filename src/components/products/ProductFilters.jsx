@@ -22,6 +22,8 @@ export function ProductFilters({
   categories = [],
   stockStatus,
   onStockStatusChange,
+  statusFilter,
+  onStatusFilterChange,
   brand,
   onBrandChange,
   brands = [],
@@ -52,8 +54,23 @@ export function ProductFilters({
 
         {/* Quick Dropdowns */}
         <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2.5">
+          {/* Status Dropdown */}
+          <div className="col-span-1 sm:w-40">
+            <Select
+              value={statusFilter || 'All'}
+              onChange={(e) => onStatusFilterChange && onStatusFilterChange(e.target.value)}
+              options={[
+                { value: 'All', label: 'All Status' },
+                { value: 'PENDING', label: 'Pending Review' },
+                { value: 'APPROVED', label: 'Approved (Live)' },
+                { value: 'REJECTED', label: 'Rejected' },
+                { value: 'DELETED_BY_ADMIN', label: 'Deleted by Admin' },
+              ]}
+            />
+          </div>
+
           {/* Category Dropdown */}
-          <div className="col-span-2 sm:w-44">
+          <div className="col-span-1 sm:w-44">
             <Select
               value={category}
               onChange={(e) => onCategoryChange(e.target.value)}

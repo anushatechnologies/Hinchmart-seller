@@ -95,19 +95,19 @@ export function StoreSetupPage() {
       const seller = db.getSeller() || {};
       const profile = await sellerService.getStoreProfile();
 
-      const storeName = profile?.name || profile?.storeName || seller?.companyName || seller?.businessName || seller?.name || 'Seller Store';
-      const cleanSlug = profile?.slug || storeName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      const storeName = profile?.name || profile?.storeName || seller?.companyName || seller?.businessName || seller?.name || '';
+      const cleanSlug = profile?.slug || (storeName ? storeName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : '');
 
       const storedLogo = typeof localStorage !== 'undefined' ? localStorage.getItem('hinchmart_seller_logo') : null;
       const storedBanner = typeof localStorage !== 'undefined' ? localStorage.getItem('hinchmart_seller_banner') : null;
 
       const resolvedLogo = storedLogo || profile?.logoUrl || profile?.logo || seller?.logoUrl || seller?.logo || '';
-      const resolvedBanner = storedBanner || profile?.bannerUrl || profile?.banner || seller?.bannerUrl || seller?.banner || 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=1200&auto=format&fit=crop&q=80';
+      const resolvedBanner = storedBanner || profile?.bannerUrl || profile?.banner || seller?.bannerUrl || seller?.banner || '';
 
       setStoreData({
         name: storeName,
         slug: cleanSlug,
-        description: profile?.description || seller?.description || `${storeName} is a registered building material and industrial supplier on HinchMart B2B marketplace.`,
+        description: profile?.description || seller?.description || '',
         logoUrl: resolvedLogo,
         bannerUrl: resolvedBanner,
         minOrderValue: Number(profile?.minOrderValue ?? seller?.minOrderValue ?? 0),

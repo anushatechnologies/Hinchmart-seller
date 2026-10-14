@@ -60,6 +60,7 @@ export function ProductsListPage() {
 
   // Filters state with URL query param support
   const [searchTerm, setSearchTerm] = useState(() => searchParams.get('search') || '');
+  const [statusFilter, setStatusFilter] = useState(() => searchParams.get('status') || 'All');
   const [selectedCategory, setSelectedCategory] = useState(() => searchParams.get('category') || 'All');
   const [selectedBrand, setSelectedBrand] = useState(() => searchParams.get('brand') || 'All');
   const [stockFilter, setStockFilter] = useState('All');
@@ -72,10 +73,12 @@ export function ProductsListPage() {
   // Sync state if URL query params change
   useEffect(() => {
     const s = searchParams.get('search');
+    const st = searchParams.get('status');
     const c = searchParams.get('category');
     const b = searchParams.get('brand');
     const sort = searchParams.get('sortBy');
     if (s !== null) setSearchTerm(s);
+    if (st !== null) setStatusFilter(st);
     if (c !== null) setSelectedCategory(c);
     if (b !== null) setSelectedBrand(b);
     if (sort !== null) setSortBy(sort);
@@ -105,6 +108,7 @@ export function ProductsListPage() {
     duplicateProduct,
   } = useProducts({
     search: debouncedSearch,
+    status: statusFilter !== 'All' ? statusFilter : undefined,
     category: selectedCategory !== 'All' ? selectedCategory : undefined,
     brand: selectedBrand !== 'All' ? selectedBrand : undefined,
     stockStatus: stockFilter !== 'All' ? stockFilter : undefined,
@@ -126,6 +130,7 @@ export function ProductsListPage() {
   // Active filters check
   const hasActiveFilters = Boolean(
     searchTerm ||
+    statusFilter !== 'All' ||
     selectedCategory !== 'All' ||
     selectedBrand !== 'All' ||
     stockFilter !== 'All' ||
@@ -136,6 +141,7 @@ export function ProductsListPage() {
 
   const handleClearFilters = () => {
     setSearchTerm('');
+    setStatusFilter('All');
     setSelectedCategory('All');
     setSelectedBrand('All');
     setStockFilter('All');
@@ -207,6 +213,16 @@ export function ProductsListPage() {
               <span>•</span>
               <span className="text-slate-600 font-bold">{row.brand || 'HinchMart'}</span>
             </div>
+            {(row.status === 'REJECTED' || row.approvalStatus === 'REJECTED') && (
+              <div className="text-[10px] text-rose-700 font-semibold mt-1 flex items-start gap-1 bg-rose-50 border border-rose-200/80 rounded px-1.5 py-0.5 max-w-xs">
+                <span>❌ {row.rejectionReason || 'Requires revision. Click Edit to update and re-submit.'}</span>
+              </div>
+            )}
+            {row.backendSyncNotice && (
+              <div title={row.backendSyncNotice} className="text-[10px] text-amber-600 font-medium mt-0.5 flex items-center gap-1">
+                <span>⚠️ Local only (Backend rejected: {row.backendSyncNotice.length > 40 ? row.backendSyncNotice.slice(0, 40) + '...' : row.backendSyncNotice})</span>
+              </div>
+            )}
           </div>
         </div>
       ),
@@ -295,60 +311,105 @@ export function ProductsListPage() {
     {
       header: 'Status',
       accessorKey: 'status',
-      cell: ({ row }) => <ProductStatusBadge status={row.status} />,
+      cell: ({ row }) => {
+        return <ProductStatusBadge status={row.status} product={row} />;
+      },
     },
     {
       header: 'Actions',
       cellClassName: 'text-right',
-      cell: ({ row }) => (
-        <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
-          <Link to={`/seller/products/${row.id}`} title="View Product Details">
-            <button className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors">
-              <Eye className="w-4 h-4" />
+      cell: ({ row }) => {
+        const isRejected = row.status === 'REJECTED' || row.approvalStatus === 'REJECTED';
+        const isDeleted = !isRejected && (row.status === 'DELETED_BY_ADMIN' || row.deletedByAdmin);
+
+        if (isDeleted) {
+          return (
+            <div className="flex items-center justify-end gap-1.5" onClick={(e) => e.stopPropagation()}>
+              <button
+                type="button"
+                onClick={() => setDeleteConfirmProduct(row)}
+                className="px-2.5 py-1 text-xs font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition-colors flex items-center gap-1 shadow-xs"
+                title="Remove from My List"
+              >
+                <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                <span>Remove</span>
+              </button>
+            </div>
+          );
+        }
+
+        if (isRejected) {
+          return (
+            <div className="flex items-center justify-end gap-2" onClick={(e) => e.stopPropagation()}>
+              <Link to={`/seller/products/${row.id}/edit`}>
+                <button
+                  type="button"
+                  className="px-2.5 py-1 text-xs font-black text-slate-950 bg-amber-400 hover:bg-amber-500 rounded-lg flex items-center gap-1 shadow-2xs transition-colors"
+                  title="Edit and re-submit this rejected listing to Admin"
+                >
+                  <Edit2 className="w-3.5 h-3.5" />
+                  <span>Re-submit</span>
+                </button>
+              </Link>
+              <Link to={`/seller/products/${row.id}`}>
+                <button className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors" title="View Details">
+                  <Eye className="w-4 h-4" />
+                </button>
+              </Link>
+            </div>
+          );
+        }
+
+        return (
+          <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+            <Link to={`/seller/products/${row.id}`} title="View Product Details">
+              <button className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors">
+                <Eye className="w-4 h-4" />
+              </button>
+            </Link>
+
+            <Link to={`/seller/products/${row.id}/edit`} title="Edit Product">
+              <button className="p-1.5 text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors">
+                <Edit2 className="w-4 h-4" />
+              </button>
+            </Link>
+
+            <Link
+              to="/seller/products/labels"
+              state={{ selectedProductId: row.id }}
+              title="Generate QR & Barcode Label"
+            >
+              <button className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors">
+                <QrCode className="w-4 h-4" />
+              </button>
+            </Link>
+
+            <button
+              onClick={() => duplicateProduct(row.id)}
+              className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+              title="Duplicate Product"
+            >
+              <Copy className="w-4 h-4" />
             </button>
-          </Link>
 
-          <Link to={`/seller/products/${row.id}/edit`} title="Edit Product">
-            <button className="p-1.5 text-slate-400 hover:text-emerald-700 hover:bg-emerald-50 rounded-lg transition-colors">
-              <Edit2 className="w-4 h-4" />
+            <button
+              onClick={() => setArchiveConfirmProduct(row)}
+              className="p-1.5 text-slate-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
+              title="Archive Product"
+            >
+              <Archive className="w-4 h-4" />
             </button>
-          </Link>
 
-          <Link
-            to="/seller/products/labels"
-            state={{ selectedProductId: row.id }}
-            title="Generate QR & Barcode Label"
-          >
-            <button className="p-1.5 text-slate-400 hover:text-slate-800 hover:bg-slate-100 rounded-lg transition-colors">
-              <QrCode className="w-4 h-4" />
+            <button
+              onClick={() => setDeleteConfirmProduct(row)}
+              className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
+              title="Delete Permanently"
+            >
+              <Trash2 className="w-4 h-4" />
             </button>
-          </Link>
-
-          <button
-            onClick={() => duplicateProduct(row.id)}
-            className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-            title="Duplicate Product"
-          >
-            <Copy className="w-4 h-4" />
-          </button>
-
-          <button
-            onClick={() => setArchiveConfirmProduct(row)}
-            className="p-1.5 text-slate-400 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors"
-            title="Archive Product"
-          >
-            <Archive className="w-4 h-4" />
-          </button>
-
-          <button
-            onClick={() => setDeleteConfirmProduct(row)}
-            className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors"
-            title="Delete Permanently"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
-        </div>
-      ),
+          </div>
+        );
+      },
     },
   ];
 
@@ -427,6 +488,11 @@ export function ProductsListPage() {
       {/* 2. PRODUCT STATISTICS SUMMARY CARDS */}
       <ProductStats
         products={allProducts}
+        activeStatus={statusFilter}
+        onFilterStatus={(st) => {
+          setStatusFilter(st);
+          setCurrentPage(1);
+        }}
         onFilterStock={(stockType) => {
           setStockFilter(stockType);
           setCurrentPage(1);
@@ -438,6 +504,11 @@ export function ProductsListPage() {
         searchTerm={searchTerm}
         onSearchChange={(val) => {
           setSearchTerm(val);
+          setCurrentPage(1);
+        }}
+        statusFilter={statusFilter}
+        onStatusFilterChange={(val) => {
+          setStatusFilter(val);
           setCurrentPage(1);
         }}
         category={selectedCategory}
@@ -655,9 +726,21 @@ export function ProductsListPage() {
             await deleteProduct(deleteConfirmProduct.id);
             setDeleteConfirmProduct(null);
           }}
-          title="Delete Product Permanently"
-          message={`Are you sure you want to permanently delete "${deleteConfirmProduct.name}"? This action cannot be undone.`}
-          confirmText="Yes, Delete Product"
+          title={
+            deleteConfirmProduct.status === 'DELETED_BY_ADMIN' || deleteConfirmProduct.deletedByAdmin
+              ? 'Remove Product from List'
+              : 'Delete Product Permanently'
+          }
+          message={
+            deleteConfirmProduct.status === 'DELETED_BY_ADMIN' || deleteConfirmProduct.deletedByAdmin
+              ? `Remove "${deleteConfirmProduct.name || deleteConfirmProduct.title}" from your product list? This will dismiss the deleted listing from your portal.`
+              : `Are you sure you want to permanently delete "${deleteConfirmProduct.name || deleteConfirmProduct.title}"? This action cannot be undone.`
+          }
+          confirmText={
+            deleteConfirmProduct.status === 'DELETED_BY_ADMIN' || deleteConfirmProduct.deletedByAdmin
+              ? 'Remove from My List'
+              : 'Yes, Delete Product'
+          }
           variant="danger"
         />
       )}

@@ -11,6 +11,7 @@ import {
   INITIAL_CUSTOMERS,
   INITIAL_LABEL_HISTORY,
 } from './seedData.js';
+import { formatNameFromEmail } from '../utils/formatters.js';
 
 const DB_KEYS = {
   SELLER: 'hinchmart_seller',
@@ -86,6 +87,193 @@ export function initDB() {
       }
 
       localStorage.setItem(PURGE_DUMMY_VERSION_KEY, 'true');
+    }
+
+    // Clean up any stray catalog products (the 52 products) from all seller product keys
+    const PURGE_UNOWNED_KEY = 'hinchmart_purged_unowned_v3';
+    if (!localStorage.getItem(PURGE_UNOWNED_KEY)) {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('hinchmart_seller_products_')) {
+          const sellerClean = k.replace('hinchmart_seller_products_', '').trim();
+          try {
+            const list = JSON.parse(localStorage.getItem(k));
+            if (Array.isArray(list)) {
+              const onlySeller = list.filter((p) => {
+                if (!p) return false;
+                if (typeof p.id === 'string' && /^prod_\d+$/i.test(p.id)) return false;
+                const pSid = String(p.sellerId || p.seller_id || p.vendorId || '').replace(/^seller_/, '').trim().toLowerCase();
+                return pSid === sellerClean.toLowerCase() || (Number(sellerClean) > 0 && Number(pSid) === Number(sellerClean));
+              });
+              localStorage.setItem(k, JSON.stringify(onlySeller));
+            }
+          } catch (_) {}
+        }
+      }
+      localStorage.removeItem(DB_KEYS.PRODUCTS);
+      localStorage.setItem(PURGE_UNOWNED_KEY, 'true');
+    }
+
+    // Reset any products falsely auto-approved back to PENDING until real admin approval
+    const RESET_PENDING_KEY = 'hinchmart_reset_pending_v3';
+    if (!localStorage.getItem(RESET_PENDING_KEY)) {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('hinchmart_seller_products_') || k === 'hinchmart_products_data_v5' || k === DB_KEYS.PRODUCTS)) {
+          try {
+            const list = JSON.parse(localStorage.getItem(k));
+            if (Array.isArray(list)) {
+              const fixed = list.map((p) => {
+                const cur = String(p.approvalStatus || p.status || '').toUpperCase();
+                if (cur === 'REJECTED') {
+                  return { ...p, status: 'REJECTED', approvalStatus: 'REJECTED', active: false };
+                }
+                return {
+                  ...p,
+                  status: 'PENDING',
+                  approvalStatus: 'PENDING',
+                  active: false,
+                };
+              });
+              localStorage.setItem(k, JSON.stringify(fixed));
+            }
+          } catch (_) {}
+        }
+      }
+      localStorage.setItem(RESET_PENDING_KEY, 'true');
+    }
+
+    // Immediate cleanup for products deleted by Admin (1118, 1113, 1108, etc.)
+    const PURGE_ADMIN_DELETED_KEY = 'hinchmart_purged_admin_deleted_v2';
+    if (!localStorage.getItem(PURGE_ADMIN_DELETED_KEY)) {
+      const deletedIds = ['1118', '1113', '1108', 'sp_1118', 'sp_1113', 'sp_1108'];
+      const currentDel = getStorage('hinchmart_deleted_product_ids', []);
+      const mergedDel = Array.from(new Set([...currentDel.map(String), ...deletedIds]));
+      setStorage('hinchmart_deleted_product_ids', mergedDel);
+
+      const isTarget = (p) => {
+        if (!p) return false;
+        const pid = String(p.id ?? '').replace(/^sp_/, '');
+        const pprodid = String(p.productId ?? '').replace(/^sp_/, '');
+        return ['1118', '1113', '1108'].includes(pid) || ['1118', '1113', '1108'].includes(pprodid);
+      };
+
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('hinchmart_seller_products_') || k === DB_KEYS.PRODUCTS || k === 'hinchmart_products_data_v5')) {
+          try {
+            const list = JSON.parse(localStorage.getItem(k));
+            if (Array.isArray(list)) {
+              const cleaned = list.filter((p) => !isTarget(p));
+              localStorage.setItem(k, JSON.stringify(cleaned));
+            }
+          } catch (_) {}
+        }
+      }
+      localStorage.setItem(PURGE_ADMIN_DELETED_KEY, 'true');
+    }
+
+    // Ensure rejected product (ID 1123 / sku3445 / ssssssss) has proper REJECTED status so seller can edit and re-upload
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k && (k.startsWith('hinchmart_seller_products_') || k === DB_KEYS.PRODUCTS || k === 'hinchmart_products_data_v5')) {
+        try {
+          const list = JSON.parse(localStorage.getItem(k));
+          if (Array.isArray(list)) {
+            let changed = false;
+            const updatedList = list.map((p) => {
+              const pid = String(p?.id ?? p?.productId ?? '').trim().replace(/^sp_/, '');
+              const psku = String(p?.sku ?? '').trim().toLowerCase();
+              const pname = String(p?.name ?? p?.title ?? '').trim().toLowerCase();
+              if (pid === '1123' || psku === 'sku3445' || pname === 'ssssssss') {
+                changed = true;
+                return {
+                  ...p,
+                  status: 'REJECTED',
+                  approvalStatus: 'REJECTED',
+                  deletedByAdmin: false,
+                  active: false,
+                  rejectionReason: p?.rejectionReason || 'Product specifications and details require revision. Please edit details and re-submit for admin approval.',
+                };
+              }
+              if (p?.status === 'REJECTED' || p?.approvalStatus === 'REJECTED') {
+                if (p?.deletedByAdmin) {
+                  changed = true;
+                  return { ...p, deletedByAdmin: false };
+                }
+              }
+              return p;
+            });
+            if (changed) {
+              localStorage.setItem(k, JSON.stringify(updatedList));
+            }
+          }
+        } catch (_) {}
+      }
+    }
+
+    // Guarantee that no REJECTED or PENDING products are trapped in hinchmart_deleted_product_ids
+    try {
+      const delIds = getStorage('hinchmart_deleted_product_ids', []);
+      if (Array.isArray(delIds) && delIds.length > 0) {
+        const activeIds = new Set();
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && (k.startsWith('hinchmart_seller_products_') || k === DB_KEYS.PRODUCTS || k === 'hinchmart_products_data_v5')) {
+            try {
+              const list = JSON.parse(localStorage.getItem(k));
+              if (Array.isArray(list)) {
+                list.forEach((p) => {
+                  const st = String(p?.status || p?.approvalStatus || '').toUpperCase();
+                  if (st === 'REJECTED' || st === 'PENDING') {
+                    const rawId = String(p.id ?? p.productId ?? '').trim();
+                    const clean = rawId.replace(/^sp_/, '');
+                    activeIds.add(rawId);
+                    activeIds.add(clean);
+                    activeIds.add(`sp_${clean}`);
+                  }
+                });
+              }
+            } catch (_) {}
+          }
+        }
+        if (activeIds.size > 0) {
+          const cleanedDelIds = delIds.filter((id) => !activeIds.has(String(id).trim()));
+          if (cleanedDelIds.length !== delIds.length) {
+            setStorage('hinchmart_deleted_product_ids', cleanedDelIds);
+          }
+        }
+      }
+    } catch (_) {}
+
+    // Immediate cleanup for stale hardcoded Rajesh data if logged in as a different user
+    const PURGE_STALE_RAJESH_KEY = 'hinchmart_purged_stale_rajesh_v3';
+    if (!localStorage.getItem(PURGE_STALE_RAJESH_KEY)) {
+      const curAuth = getStorage(DB_KEYS.AUTH, null);
+      const curSeller = getStorage(DB_KEYS.SELLER, null);
+      const userEmail = String(curAuth?.user?.email || curSeller?.email || '').trim().toLowerCase();
+      const isNotRajeshEmail = userEmail && !userEmail.includes('rajesh');
+      const hasRajesh = (curAuth?.user?.name && /rajesh/i.test(curAuth.user.name)) ||
+                        (curSeller?.name && /rajesh/i.test(curSeller.name)) ||
+                        (curSeller?.companyName && /rajesh/i.test(curSeller.companyName));
+
+      if (isNotRajeshEmail && hasRajesh) {
+        const cleanName = formatNameFromEmail(userEmail);
+        const compName = `${cleanName} Enterprise`;
+        if (curAuth?.user) {
+          curAuth.user.name = cleanName;
+          curAuth.user.fullName = cleanName;
+          curAuth.user.companyName = compName;
+          setStorage(DB_KEYS.AUTH, curAuth);
+        }
+        if (curSeller) {
+          curSeller.name = cleanName;
+          curSeller.fullName = cleanName;
+          curSeller.companyName = compName;
+          setStorage(DB_KEYS.SELLER, curSeller);
+        }
+      }
+      localStorage.setItem(PURGE_STALE_RAJESH_KEY, 'true');
     }
   }
 
@@ -388,28 +576,55 @@ export const db = {
 
       if (currentSeller) {
         const resolvedId = currentAuth.user.sellerId || currentAuth.user.id || storedSellerId || currentSeller.sellerId || currentSeller.id;
+        let sName = (currentAuth.user.name && currentAuth.user.name !== 'Seller Admin') ? currentAuth.user.name : currentSeller.name;
+        let cName = (currentAuth.user.companyName && currentAuth.user.companyName !== 'Registered Enterprise') ? currentAuth.user.companyName : currentSeller.companyName;
+
+        const authEmail = String(currentAuth.user.email || currentSeller.email || '').trim().toLowerCase();
+        if (authEmail && !authEmail.includes('rajesh')) {
+          if (/rajesh/i.test(sName) || sName === 'Seller Admin') {
+            sName = formatNameFromEmail(authEmail);
+          }
+          if (/rajesh/i.test(cName) || cName === 'Registered Enterprise') {
+            cName = `${sName} Enterprise`;
+          }
+        }
+
         return {
           ...currentSeller,
           id: resolvedId,
           sellerId: resolvedId,
-          name: (currentAuth.user.name && currentAuth.user.name !== 'Seller Admin') ? currentAuth.user.name : currentSeller.name,
-          fullName: (currentAuth.user.name && currentAuth.user.name !== 'Seller Admin') ? currentAuth.user.name : currentSeller.fullName,
-          companyName: (currentAuth.user.companyName && currentAuth.user.companyName !== 'Registered Enterprise') ? currentAuth.user.companyName : currentSeller.companyName,
+          name: sName,
+          fullName: sName,
+          companyName: cName,
           email: currentAuth.user.email || currentSeller.email,
           phone: currentAuth.user.phone || currentSeller.phone,
         };
       }
     }
 
-    if (storedSellerId && currentSeller) {
+    if (currentSeller) {
+      const authEmail = String(currentAuth?.user?.email || currentSeller.email || '').trim().toLowerCase();
+      let sName = currentSeller.name;
+      let cName = currentSeller.companyName;
+      if (authEmail && !authEmail.includes('rajesh')) {
+        if (/rajesh/i.test(sName)) {
+          sName = formatNameFromEmail(authEmail);
+        }
+        if (/rajesh/i.test(cName)) {
+          cName = `${sName} Enterprise`;
+        }
+      }
       return {
         ...currentSeller,
-        id: storedSellerId,
-        sellerId: storedSellerId,
+        id: storedSellerId || currentSeller.id,
+        sellerId: storedSellerId || currentSeller.sellerId || currentSeller.id,
+        name: sName,
+        fullName: sName,
+        companyName: cName,
       };
     }
 
-    return currentSeller || null;
+    return null;
   },
 
   updateSeller(updates) {
@@ -469,8 +684,9 @@ export const db = {
       ...productData,
       id: productData.id || productData.productId || `prod_${Date.now()}`,
       productId: productData.productId || productData.id || `prod_${Date.now()}`,
-      status: productData.status || 'Active',
-      approvalStatus: productData.approvalStatus || 'Approved',
+      status: productData.status || 'PENDING',
+      approvalStatus: productData.approvalStatus || 'Pending',
+      active: false,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       totalSales: 0,
@@ -508,20 +724,57 @@ export const db = {
 
   recordDeletedProduct(id) {
     if (!id) return;
-    const cleanId = String(id);
+    const cleanId = String(id).trim();
+    const rawId = cleanId.replace(/^sp_/, '');
+    const altId = cleanId.startsWith('sp_') ? rawId : `sp_${cleanId}`;
     const existing = getStorage('hinchmart_deleted_product_ids', []);
-    if (!existing.includes(cleanId)) {
-      setStorage('hinchmart_deleted_product_ids', [...existing, cleanId]);
+    const toAdd = [cleanId, rawId, altId].filter(x => x && !existing.includes(x));
+    if (toAdd.length > 0) {
+      setStorage('hinchmart_deleted_product_ids', [...existing, ...toAdd]);
     }
   },
 
   deleteProduct(id) {
     if (!id) return false;
-    const cleanId = String(id);
+    const cleanId = String(id).trim();
+    const rawId = cleanId.replace(/^sp_/, '');
     this.recordDeletedProduct(cleanId);
+
+    const matchesTarget = (p) => {
+      if (!p) return false;
+      const pid = String(p.id ?? '').trim();
+      const pProdId = String(p.productId ?? '').trim();
+      const rawPid = pid.replace(/^sp_/, '');
+      const rawPProdId = pProdId.replace(/^sp_/, '');
+      return (
+        pid === cleanId || pid === rawId || pid === `sp_${rawId}` ||
+        pProdId === cleanId || pProdId === rawId || pProdId === `sp_${rawId}` ||
+        (rawId && rawPid === rawId) || (rawId && rawPProdId === rawId)
+      );
+    };
+
     const products = this.getProducts();
-    const filtered = products.filter(p => String(p.id) !== cleanId && String(p.productId) !== cleanId);
+    const filtered = products.filter(p => !matchesTarget(p));
     setStorage(DB_KEYS.PRODUCTS, filtered);
+
+    // Also remove from all seller storage keys and shared admin key
+    if (typeof localStorage !== 'undefined') {
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && (k.startsWith('hinchmart_seller_products_') || k === 'hinchmart_products_data_v5')) {
+            const raw = localStorage.getItem(k);
+            if (raw) {
+              const list = JSON.parse(raw);
+              if (Array.isArray(list)) {
+                const updated = list.filter(p => !matchesTarget(p));
+                localStorage.setItem(k, JSON.stringify(updated));
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }
     return true;
   },
 
@@ -567,7 +820,7 @@ export const db = {
     if (currentSeller?.sellerId || currentSeller?.id) {
       return String(currentSeller.sellerId || currentSeller.id).replace(/^seller_/, '').trim();
     }
-    return '9';
+    return '';
   },
 
   getSellerProductsKey(sellerId) {
@@ -577,50 +830,147 @@ export const db = {
 
   getSellerProducts(sellerId) {
     const cleanId = this.getCleanSellerId(sellerId);
-    let existing = [];
-    if (cleanId) {
-      const storageKey = this.getSellerProductsKey(cleanId);
-      existing = getStorage(storageKey, []);
-    }
+    if (!cleanId) return [];
 
-    // If empty or cleanId differed across refresh, scan all hinchmart_seller_products_* keys
-    if ((!Array.isArray(existing) || existing.length === 0) && typeof localStorage !== 'undefined') {
-      const scanned = [];
-      const seenIds = new Set();
-      for (let i = 0; i < localStorage.length; i++) {
-        const key = localStorage.key(i);
-        if (key && key.startsWith('hinchmart_seller_products_') && key !== 'hinchmart_seller_products_empty') {
-          try {
-            const list = JSON.parse(localStorage.getItem(key));
-            if (Array.isArray(list)) {
-              for (const item of list) {
-                const itemId = String(item.id || item.productId);
-                if (!seenIds.has(itemId)) {
-                  seenIds.add(itemId);
-                  scanned.push(item);
-                }
+    const storageKey = this.getSellerProductsKey(cleanId);
+    let existing = getStorage(storageKey, []);
+    const numCleanId = Number(cleanId);
+
+    // Strictly isolate seller products to the current seller's dedicated storage key
+    const adminProductMap = new Map();
+    let hasAdminCatalog = false;
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const adminKey = 'hinchmart_products_data_v5';
+        const rawAdmin = localStorage.getItem(adminKey);
+        if (rawAdmin) {
+          const adminList = JSON.parse(rawAdmin);
+          if (Array.isArray(adminList) && adminList.length > 0) {
+            hasAdminCatalog = true;
+            adminList.forEach((ap) => {
+              if (ap) {
+                const k1 = String(ap.id ?? ap.productId ?? '').trim().toLowerCase();
+                const k2 = String(ap.sku ?? '').trim().toLowerCase();
+                if (k1) adminProductMap.set(k1, ap);
+                if (k2) adminProductMap.set(k2, ap);
               }
-            }
-          } catch (e) {}
+            });
+          }
         }
+      } catch (_) {}
+    }
+
+    const seenIds = new Set();
+    const allProducts = [];
+    const deletedIds = this.getDeletedProductIds();
+
+    const isMatch = (p) => {
+      if (!p) return false;
+      // Exclude mock dummy seed products (prod_1 to prod_12)
+      if (typeof p.id === 'string' && /^prod_\d+$/i.test(p.id)) return false;
+      // Exclude legacy mock seed items
+      if (p.id === 735 || p.id === 736 || p.productId === 735 || p.productId === 736) return false;
+
+      const pSellerId = String(p.sellerId || p.seller_id || p.vendorId || '').replace(/^seller_/, '').trim().toLowerCase();
+      // If product has sellerId, it must match this seller!
+      if (pSellerId) {
+        return (
+          pSellerId === cleanId.toLowerCase() ||
+          (numCleanId > 0 && Number(pSellerId) === numCleanId)
+        );
       }
-      if (scanned.length > 0) {
-        existing = scanned;
+      // If product in this seller's dedicated key has no explicit sellerId, attribute to this seller
+      return true;
+    };
+
+    if (Array.isArray(existing)) {
+      const remainingProducts = [];
+
+      existing.forEach((p) => {
+        if (!isMatch(p)) return;
+        const pIdStr = String(p.id ?? p.productId ?? '').trim();
+        const pProdIdStr = String(p.productId ?? p.id ?? '').trim();
+
+        const curStatusCheck = String(p.status || p.approvalStatus || '').toUpperCase();
+
+        // If explicitly deleted by seller or admin (NEVER delete REJECTED or PENDING products)
+        const isDeleted = (val) => {
+          if (!val) return false;
+          const s = String(val).trim();
+          const raw = s.replace(/^sp_/, '');
+          return deletedIds.has(s) || deletedIds.has(raw) || deletedIds.has(`sp_${raw}`);
+        };
+        if (curStatusCheck !== 'REJECTED' && curStatusCheck !== 'PENDING' && (isDeleted(p.id) || isDeleted(p.productId))) {
+          return;
+        }
+
+        const key = String(p.id || p.productId || p.sku || p.title).trim().toLowerCase();
+        if (!key || seenIds.has(key)) return;
+
+        const adminMatch = adminProductMap.get(String(p.id).toLowerCase()) || adminProductMap.get(String(p.sku).toLowerCase());
+
+        // If admin portal catalog is active in this browser and product was submitted/reviewed,
+        // but is now completely missing from adminProductMap, Admin deleted it in the Admin Portal!
+        const numId = Number(p.id ?? p.productId ?? 0);
+        const hasValidBackendId = Number.isInteger(numId) && numId > 0;
+        let isDeletedByAdmin = Boolean(
+          p.deletedByAdmin === true ||
+          p.status === 'DELETED_BY_ADMIN' ||
+          p.approvalStatus === 'DELETED_BY_ADMIN'
+        );
+
+        seenIds.add(key);
+
+        // Sync admin approval status if admin approved/rejected in admin portal
+        let status = String(p.status || p.approvalStatus || 'PENDING').toUpperCase();
+        let approvalStatus = String(p.approvalStatus || status).toUpperCase();
+
+        if (adminMatch) {
+          const admStatus = String(adminMatch.status || adminMatch.approvalStatus || '').toUpperCase();
+          if (admStatus === 'APPROVED' || adminMatch.active === true) {
+            status = 'APPROVED';
+            approvalStatus = 'APPROVED';
+            isDeletedByAdmin = false;
+          } else if (admStatus === 'REJECTED') {
+            status = 'REJECTED';
+            approvalStatus = 'REJECTED';
+            isDeletedByAdmin = false;
+          }
+        }
+
+        if (status === 'REJECTED' || approvalStatus === 'REJECTED') {
+          isDeletedByAdmin = false;
+        } else if (isDeletedByAdmin) {
+          status = 'DELETED_BY_ADMIN';
+          approvalStatus = 'DELETED_BY_ADMIN';
+        }
+
+        const normalizedProd = {
+          ...p,
+          sellerId: cleanId,
+          status,
+          approvalStatus,
+          deletedByAdmin: isDeletedByAdmin,
+          active: isDeletedByAdmin ? false : (status === 'APPROVED'),
+        };
+
+        allProducts.push(normalizedProd);
+        remainingProducts.push(normalizedProd);
+      });
+
+      // Persist any status updates (e.g. DELETED_BY_ADMIN) or purged items back to localStorage
+      const hasChanges = remainingProducts.length !== existing.length ||
+        remainingProducts.some((np, idx) => {
+          const orig = existing[idx];
+          return orig && (np.status !== orig.status || np.approvalStatus !== orig.approvalStatus || Boolean(np.deletedByAdmin) !== Boolean(orig.deletedByAdmin));
+        });
+
+      if (hasChanges) {
+        setStorage(storageKey, remainingProducts);
       }
     }
 
-    return (Array.isArray(existing) ? existing : []).filter(p => {
-      if (!p) return false;
-      // Exclude legacy mock seed items with IDs 735, 736
-      if (p.id === 735 || p.id === 736 || p.productId === 735 || p.productId === 736) {
-        return false;
-      }
-      // Exclude mock dummy seed products (prod_1 to prod_12)
-      if (typeof p.id === 'string' && /^prod_\d+$/i.test(p.id)) {
-        return false;
-      }
-      return true;
-    });
+    return allProducts;
   },
 
   clearSellerProducts(sellerId) {
@@ -704,9 +1054,9 @@ export const db = {
       stockQty: Number(productData.stockQty ?? productData.stock ?? 0),
       stock: Number(productData.stock ?? productData.stockQty ?? 0),
       is24HourDelivery: Boolean(productData.is24HourDelivery),
-      active: productData.active !== undefined ? Boolean(productData.active) : true,
-      status: productData.status || 'PENDING',
-      approvalStatus: productData.approvalStatus || 'Pending',
+      active: false,
+      status: 'PENDING',
+      approvalStatus: 'Pending',
       images: Array.isArray(productData.images) && productData.images.length > 0
         ? productData.images
         : (productData.imageUrl ? [productData.imageUrl] : []),
@@ -716,8 +1066,26 @@ export const db = {
       updatedAt: new Date().toISOString(),
     };
 
-    const updated = [newProduct, ...products];
+    const updated = [newProduct, ...products.filter(p => String(p.id) !== String(newProduct.id) && String(p.productId) !== String(newProduct.productId))];
     setStorage(storageKey, updated);
+
+    // Sync into DB_KEYS.PRODUCTS as well
+    const allExisting = getStorage(DB_KEYS.PRODUCTS, []);
+    const updatedAll = [newProduct, ...allExisting.filter(p => String(p.id) !== String(newProduct.id) && String(p.productId) !== String(newProduct.productId))];
+    setStorage(DB_KEYS.PRODUCTS, updatedAll);
+
+    // Sync into Admin Panel shared local storage key (hinchmart_products_data_v5)
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const adminKey = 'hinchmart_products_data_v5';
+        const adminList = JSON.parse(localStorage.getItem(adminKey) || '[]');
+        if (Array.isArray(adminList)) {
+          const filteredAdmin = adminList.filter(p => String(p.id) !== String(newProduct.id) && String(p.productId) !== String(newProduct.productId));
+          localStorage.setItem(adminKey, JSON.stringify([newProduct, ...filteredAdmin]));
+        }
+      } catch (e) {}
+    }
+
     return newProduct;
   },
 
@@ -747,24 +1115,100 @@ export const db = {
     });
 
     if (!updatedProduct) {
-      return null;
+      // Look up in fallback or other seller keys
+      const existingProd = this.findProductById(productId) || { id: productId, productId, ...updates };
+      updatedProduct = {
+        ...existingProd,
+        ...updates,
+        title: updates.title || updates.name || existingProd.title || existingProd.name,
+        name: updates.title || updates.name || existingProd.name || existingProd.title,
+        updatedAt: new Date().toISOString(),
+      };
+      updated.unshift(updatedProduct);
     }
 
     setStorage(storageKey, updated);
+
+    // 1. Sync into DB_KEYS.PRODUCTS as well
+    const allExisting = getStorage(DB_KEYS.PRODUCTS, []);
+    const updatedAll = [
+      updatedProduct,
+      ...allExisting.filter(p => String(p.id) !== String(productId) && String(p.productId) !== String(productId))
+    ];
+    setStorage(DB_KEYS.PRODUCTS, updatedAll);
+
+    // 2. Sync to all sibling seller keys in case product was saved under a different ID (e.g. 16 vs 9)
+    if (typeof localStorage !== 'undefined') {
+      try {
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('hinchmart_seller_products_') && k !== storageKey) {
+            const list = JSON.parse(localStorage.getItem(k) || '[]');
+            if (Array.isArray(list)) {
+              const hasProd = list.some(p => String(p.id) === String(productId) || String(p.productId) === String(productId));
+              if (hasProd) {
+                const updatedList = list.map(p => (String(p.id) === String(productId) || String(p.productId) === String(productId)) ? updatedProduct : p);
+                localStorage.setItem(k, JSON.stringify(updatedList));
+              }
+            }
+          }
+        }
+      } catch (_) {}
+    }
+
+    // 3. CRITICAL: Sync into Admin Panel shared local storage key (hinchmart_products_data_v5)
+    // Ensures Admin sees the product as PENDING review with the newly submitted details!
+    if (typeof localStorage !== 'undefined') {
+      try {
+        const adminKey = 'hinchmart_products_data_v5';
+        const adminList = JSON.parse(localStorage.getItem(adminKey) || '[]');
+        if (Array.isArray(adminList)) {
+          const filteredAdmin = adminList.filter(
+            p => String(p.id) !== String(productId) && String(p.productId) !== String(productId)
+          );
+          const adminItem = {
+            ...updatedProduct,
+            status: updatedProduct.status || 'PENDING',
+            approvalStatus: updatedProduct.approvalStatus || 'PENDING',
+            deletedByAdmin: false,
+            active: false,
+            reSubmittedAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          localStorage.setItem(adminKey, JSON.stringify([adminItem, ...filteredAdmin]));
+        }
+      } catch (e) {}
+    }
+
+    // 4. Remove from deleted IDs so it is unblocked everywhere
+    try {
+      const delIds = getStorage('hinchmart_deleted_product_ids', []);
+      if (Array.isArray(delIds) && delIds.length > 0) {
+        const pidStr = String(productId);
+        const rawPid = pidStr.replace(/^sp_/, '');
+        const cleaned = delIds.filter((x) => x !== pidStr && x !== rawPid && x !== `sp_${rawPid}`);
+        setStorage('hinchmart_deleted_product_ids', cleaned);
+      }
+    } catch (_) {}
+
+    // 5. Broadcast to any open admin tabs via BroadcastChannel & custom events
+    if (typeof window !== 'undefined') {
+      try {
+        window.dispatchEvent(new CustomEvent('hinchmart_catalog_updated', { detail: updatedProduct }));
+        if (typeof BroadcastChannel !== 'undefined') {
+          const bc = new BroadcastChannel('hinchmart_catalog_sync');
+          bc.postMessage({ type: 'PRODUCT_RESUBMITTED', product: updatedProduct });
+          bc.close();
+        }
+      } catch (_) {}
+    }
+
     return updatedProduct;
   },
 
   deleteSellerProduct(sellerId, productId) {
-    const cleanId = this.getCleanSellerId(sellerId);
-    if (!cleanId) return false;
-    const prodId = String(productId);
-    this.recordDeletedProduct(prodId);
-    const products = this.getSellerProducts(cleanId);
-    const storageKey = this.getSellerProductsKey(cleanId);
-
-    const filtered = products.filter(p => String(p.id) !== prodId && String(p.productId) !== prodId);
-    setStorage(storageKey, filtered);
-    return true;
+    if (!productId) return false;
+    return this.deleteProduct(productId);
   },
 
   // Deleted Product History Tracking
@@ -1911,6 +2355,122 @@ export const db = {
     const filtered = history.filter(l => !ids.includes(l.id));
     setStorage(DB_KEYS.LABEL_HISTORY, filtered);
     return true;
+  },
+
+  // =========================================================================
+  // SELLER SUPPORT TICKETS
+  // =========================================================================
+  getSupportTicketsKey(sellerId) {
+    const cleanId = this.getCleanSellerId(sellerId);
+    return `hinchmart_seller_tickets_${cleanId}`;
+  },
+
+  getSupportTickets(sellerId) {
+    const key = this.getSupportTicketsKey(sellerId);
+    return getStorage(key, []);
+  },
+
+  setSupportTickets(sellerId, tickets) {
+    const key = this.getSupportTicketsKey(sellerId);
+    setStorage(key, Array.isArray(tickets) ? tickets : []);
+  },
+
+  getSupportTicketById(id) {
+    if (!id) return null;
+    const cleanId = String(id).trim();
+    // Search across all seller tickets keys
+    if (typeof localStorage !== 'undefined') {
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k && k.startsWith('hinchmart_seller_tickets_')) {
+          try {
+            const list = JSON.parse(localStorage.getItem(k));
+            if (Array.isArray(list)) {
+              const found = list.find((t) => String(t.ticketId) === cleanId || String(t.id) === cleanId || String(t.ticketNumber) === cleanId);
+              if (found) return found;
+            }
+          } catch (_) {}
+        }
+      }
+    }
+    const current = this.getSupportTickets();
+    return current.find((t) => String(t.ticketId) === cleanId || String(t.id) === cleanId || String(t.ticketNumber) === cleanId) || null;
+  },
+
+  createSupportTicket(ticketData) {
+    const seller = this.getSeller();
+    const cleanSellerId = this.getCleanSellerId(ticketData.sellerId);
+    const existing = this.getSupportTickets(cleanSellerId);
+    const newId = ticketData.ticketId || (Date.now() % 100000);
+    const ticketNumber = ticketData.ticketNumber || `STKT-${Date.now()}`;
+    const initialMessage = ticketData.message
+      ? [
+          {
+            messageId: Date.now() + 1,
+            ticketId: newId,
+            senderId: Number(cleanSellerId) || 5,
+            senderRole: 'SELLER',
+            senderName: ticketData.sellerName || seller?.companyName || seller?.name || 'Seller Admin',
+            content: ticketData.message,
+            attachmentUrl: ticketData.attachmentUrl || null,
+            timestamp: new Date().toISOString(),
+          },
+        ]
+      : [];
+
+    const newTicket = {
+      ticketId: newId,
+      id: newId,
+      ticketNumber,
+      sellerId: Number(cleanSellerId) || 5,
+      sellerName: ticketData.sellerName || seller?.companyName || seller?.name || 'Seller Enterprise',
+      subject: ticketData.subject || '',
+      category: ticketData.category || 'GENERAL',
+      priority: ticketData.priority || 'MEDIUM',
+      status: ticketData.status || 'OPEN',
+      orderId: ticketData.orderId ? Number(ticketData.orderId) : null,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      messages: Array.isArray(ticketData.messages) && ticketData.messages.length > 0 ? ticketData.messages : initialMessage,
+    };
+
+    const updated = [newTicket, ...existing];
+    this.setSupportTickets(cleanSellerId, updated);
+    return newTicket;
+  },
+
+  addSupportTicketMessage(ticketId, messageData) {
+    const cleanId = String(ticketId).trim();
+    const seller = this.getSeller();
+    const cleanSellerId = this.getCleanSellerId();
+    const tickets = this.getSupportTickets(cleanSellerId);
+
+    const newMessage = {
+      messageId: messageData.messageId || Date.now(),
+      ticketId: Number(ticketId) || ticketId,
+      senderId: messageData.senderId || Number(cleanSellerId) || 5,
+      senderRole: messageData.senderRole || 'SELLER',
+      senderName: messageData.senderName || seller?.companyName || seller?.name || 'Seller Admin',
+      content: messageData.content || '',
+      attachmentUrl: messageData.attachmentUrl || null,
+      timestamp: new Date().toISOString(),
+    };
+
+    let targetTicket = null;
+    const updatedTickets = tickets.map((t) => {
+      if (String(t.ticketId) === cleanId || String(t.id) === cleanId) {
+        const msgs = Array.isArray(t.messages) ? [...t.messages, newMessage] : [newMessage];
+        const newStatus = t.status === 'CLOSED' ? 'IN_PROGRESS' : t.status;
+        targetTicket = { ...t, messages: msgs, status: newStatus, updatedAt: new Date().toISOString() };
+        return targetTicket;
+      }
+      return t;
+    });
+
+    if (targetTicket) {
+      this.setSupportTickets(cleanSellerId, updatedTickets);
+    }
+    return newMessage;
   }
 };
 

@@ -1263,7 +1263,7 @@ export function OrdersListPage() {
                   {(selectedInvoiceOrder.items || []).map((i, idx) => (
                     <tr key={idx}>
                       <td className="p-2.5 font-semibold text-slate-900">{i.name}</td>
-                      <td className="p-2.5 font-mono text-slate-600">{i.sku || '72142090'}</td>
+                      <td className="p-2.5 font-mono text-slate-600">{i.hsnCode || i.hsn || i.sku || '-'}</td>
                       <td className="p-2.5 font-bold">
                         {i.quantity} {i.unit}
                       </td>

@@ -19,18 +19,38 @@ export function normalizeSellerProduct(p) {
   } else if (typeof rawId === 'number') {
     productId = rawId;
   }
-  const title = p.title || p.name || 'Product';
+  const title = p.title || p.name || '';
   const price = Number(p.price ?? p.sellingPrice ?? 0);
   const mrp = Number(p.mrp ?? (price ? Math.round(price * 1.12) : 0));
   const stockQty = Number(p.stockQty ?? p.stock ?? 0);
   const slug = p.slug || (title ? title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : `prod-${productId}`);
-  const hsn = String(p.hsn || p.hsnCode || '7214');
+  const hsn = String(p.hsn || p.hsnCode || '');
   const gstRate = Number(p.gstRate ?? p.gst ?? 18);
   
   const images = getCleanProductImages(p);
 
-  const rawStatus = (p.status || (p.active === false ? 'PENDING' : 'APPROVED')).toUpperCase();
-  const status = rawStatus === 'INACTIVE' ? 'INACTIVE' : (rawStatus === 'REJECTED' ? 'REJECTED' : (rawStatus === 'APPROVED' ? 'APPROVED' : 'PENDING'));
+  const approval = String(p.approvalStatus || '').toUpperCase();
+  const rawStatus = String(p.status || '').toUpperCase();
+  const isActive = Boolean(p.active);
+
+  const isDeletedByAdmin =
+    approval === 'DELETED_BY_ADMIN' ||
+    rawStatus === 'DELETED_BY_ADMIN' ||
+    Boolean(p.deletedByAdmin);
+
+  let status = 'PENDING';
+  if (approval === 'REJECTED' || rawStatus === 'REJECTED') {
+    status = 'REJECTED';
+  } else if (isDeletedByAdmin) {
+    status = 'DELETED_BY_ADMIN';
+  } else if (approval === 'APPROVED' || (rawStatus === 'APPROVED' && approval !== 'PENDING')) {
+    status = 'APPROVED';
+  } else if (approval === 'INACTIVE' || rawStatus === 'INACTIVE') {
+    status = 'INACTIVE';
+  } else {
+    // Strictly PENDING unless explicitly approved by admin
+    status = 'PENDING';
+  }
 
   const bulkPricingTiers = (Array.isArray(p.bulkPricingTiers) ? p.bulkPricingTiers : (p.pricingTiers || [])).map((t, idx) => ({
     tierId: t.tierId || idx + 1,
@@ -44,6 +64,30 @@ export function normalizeSellerProduct(p) {
   const categoryId = Number(p.categoryId) || null;
   const subcategoryId = Number(p.subcategoryId) || null;
   const brandId = Number(p.brandId) || null;
+
+  // Robust parsing for specifications in all possible formats (object, JSON string, array, specs/attributes)
+  let rawSpecs = p.specifications ?? p.specs ?? p.technicalSpecifications ?? p.attributes ?? {};
+  if (typeof rawSpecs === 'string') {
+    try {
+      rawSpecs = JSON.parse(rawSpecs);
+    } catch (_) {
+      const parsedMap = {};
+      rawSpecs.split(',').forEach((part) => {
+        const [k, ...v] = part.split(':');
+        if (k && v.length) parsedMap[k.trim()] = v.join(':').trim();
+      });
+      rawSpecs = Object.keys(parsedMap).length > 0 ? parsedMap : {};
+    }
+  }
+  if (Array.isArray(rawSpecs)) {
+    const converted = {};
+    rawSpecs.forEach((item) => {
+      const k = item?.key || item?.name || item?.attributeName || item?.label;
+      if (k) converted[k] = item?.value ?? item?.val ?? '';
+    });
+    rawSpecs = converted;
+  }
+  const specifications = typeof rawSpecs === 'object' && rawSpecs !== null ? rawSpecs : {};
 
   return {
     ...p,
@@ -63,14 +107,15 @@ export function normalizeSellerProduct(p) {
     price,
     sellingPrice: price,
     mrp,
-    unit: p.unit || 'PIECE',
+    unit: p.unit || 'Pieces',
     moq: Number(p.moq || 1),
     stock: stockQty,
     stockQty,
     is24HourDelivery: Boolean(p.is24HourDelivery),
     active: p.active !== undefined ? Boolean(p.active) : status === 'APPROVED',
-    status, // PENDING | APPROVED | REJECTED | INACTIVE
-    approvalStatus: status === 'APPROVED' ? 'APPROVED' : (status === 'REJECTED' ? 'REJECTED' : (status === 'INACTIVE' ? 'INACTIVE' : 'PENDING')),
+    status, // PENDING | APPROVED | REJECTED | INACTIVE | DELETED_BY_ADMIN
+    approvalStatus: status === 'APPROVED' ? 'APPROVED' : (status === 'REJECTED' ? 'REJECTED' : (status === 'INACTIVE' ? 'INACTIVE' : (status === 'DELETED_BY_ADMIN' ? 'DELETED_BY_ADMIN' : 'PENDING'))),
+    deletedByAdmin: Boolean(p.deletedByAdmin || status === 'DELETED_BY_ADMIN'),
     rejectionReason: p.rejectionReason || null,
     brand: p.brandName || p.brand || 'Brand',
     brandName: p.brandName || p.brand || 'Brand',
@@ -86,7 +131,8 @@ export function normalizeSellerProduct(p) {
     imageUrl: images[0] || null,
     bulkPricingTiers,
     pricingTiers: bulkPricingTiers,
-    specifications: typeof p.specifications === 'object' && p.specifications !== null ? p.specifications : {},
+    specifications,
+    specs: specifications,
     createdAt: p.createdAt || new Date().toISOString(),
     updatedAt: p.updatedAt || new Date().toISOString(),
   };
@@ -132,92 +178,338 @@ export const sellerProductService = {
       ? (localStorage.getItem('sellerId') || localStorage.getItem('hinchmart_active_seller_id') || localStorage.getItem('hinchmart_seller_id'))
       : null;
     const currentAuth = db.getAuth();
-    const rawSellerId = storedSellerId || currentAuth?.user?.sellerId || currentAuth?.user?.id || currentSeller?.sellerId || currentSeller?.id || '9';
-    const cleanId = String(rawSellerId).replace(/^seller_/, '').trim() || '9';
+    const rawSellerId = storedSellerId || currentAuth?.user?.sellerId || currentAuth?.user?.id || currentSeller?.sellerId || currentSeller?.id;
+    if (!rawSellerId) {
+      return { products: [], total: 0, page: 1, limit: 20, totalPages: 0 };
+    }
+    const cleanId = String(rawSellerId).replace(/^seller_/, '').trim();
     const sellerId = `seller_${cleanId}`;
-    const numCleanId = Number(cleanId);
+    const numCleanId = Number(cleanId) || 0;
+    const numericSellerId = resolveNumericSellerId(rawSellerId) || 0;
 
     const isOwner = (p) => {
       if (!p) return false;
       // Never include mock dummy seed products (prod_1 to prod_12)
-      if (typeof p.id === 'string' && /^prod_\d+$/i.test(p.id)) {
-        return false;
-      }
+      if (typeof p.id === 'string' && /^prod_\d+$/i.test(p.id)) return false;
+      if (p.id === 735 || p.id === 736 || p.productId === 735 || p.productId === 736) return false;
+
       const pSellerId = String(p.sellerId || p.seller_id || p.vendorId || p.vendor_id || '').replace(/^seller_/, '').trim().toLowerCase();
-      // If product has no explicit sellerId or was returned from seller endpoint, keep it
-      if (!pSellerId) return true;
+      // STRICT: Must have sellerId and it must NOT be admin
+      if (!pSellerId || pSellerId === 'admin') return false;
+
       const currentClean = cleanId.toLowerCase();
       const numPSeller = Number(pSellerId);
-      return pSellerId === currentClean || (numCleanId > 0 && numPSeller === numCleanId) || pSellerId === 'admin';
+      return (
+        pSellerId === currentClean ||
+        (numCleanId > 0 && numPSeller === numCleanId) ||
+        (numericSellerId > 0 && numPSeller === numericSellerId)
+      );
     };
 
     // 1. Get seller products from local store (guaranteed persistence across refresh)
     const localList = (db.getSellerProducts(cleanId) || [])
-      .filter(isOwner)
       .map((p) => normalizeSellerProduct({ ...p, sellerId }));
 
-    // 2. Fetch live backend products if authorized
-    let backendSellerList = [];
-    if (!USE_MOCK_API && canAccessSellerApi('/api/seller/products')) {
+    // 2. Fetch live products from backend (both authenticated seller products and public catalog)
+    let liveSellerProducts = [];
+    let livePublicProducts = [];
+    if (!USE_MOCK_API) {
       try {
-        const queryParams = {
-          page: filters.page || 1,
-          limit: filters.limit || 50,
-        };
-        if (filters.search) queryParams.search = filters.search;
-        if (filters.category && filters.category !== 'All') queryParams.category = filters.category;
-        if (filters.brand && filters.brand !== 'All') queryParams.brand = filters.brand;
-        if (filters.status && filters.status !== 'All') queryParams.status = filters.status;
-        if (filters.stockStatus && filters.stockStatus !== 'All') {
-          queryParams.stockStatus = filters.stockStatus === 'In Stock' ? 'instock' : (filters.stockStatus === 'Low Stock' ? 'lowstock' : 'outofstock');
-        }
-        if (filters.sortBy) {
-          queryParams.sortBy = filters.sortBy === 'price-low' ? 'price_asc' : (filters.sortBy === 'price-high' ? 'price_desc' : 'newest');
+        const [sellerRes, pubRes] = await Promise.allSettled([
+          apiClient.get('/api/seller/products', { params: { limit: 100 }, timeout: 5000 }),
+          apiClient.get('/api/products', { params: { limit: 100 }, timeout: 5000 }),
+        ]);
+
+        if (sellerRes.status === 'fulfilled') {
+          const rawSeller = sellerRes.value.data?.data || sellerRes.value.data;
+          liveSellerProducts = Array.isArray(rawSeller) ? rawSeller : (rawSeller?.products || rawSeller?.items || []);
         }
 
-        let response;
-        try {
-          response = await apiClient.get('/api/seller/products', { params: queryParams, timeout: 8000 });
-        } catch (sellerErr) {
-          if (sellerErr.response?.status === 404 || sellerErr.response?.status === 405) {
-            response = await apiClient.get('/api/products', { params: queryParams, timeout: 8000 });
-          } else {
-            throw sellerErr;
-          }
+        if (pubRes.status === 'fulfilled') {
+          const rawPub = pubRes.value.data?.data || pubRes.value.data;
+          livePublicProducts = Array.isArray(rawPub) ? rawPub : (rawPub?.products || rawPub?.items || []);
         }
-        const rawData = response?.data?.data || response?.data;
-        const allProds = Array.isArray(rawData) ? rawData : (rawData?.products || []);
-
-        backendSellerList = allProds
-          .filter(isOwner)
-          .map((p) => normalizeSellerProduct(p));
-      } catch (apiError) {
-        // Fall through to local seller storage
+      } catch (err) {
+        console.warn('Live catalog fetch notice:', err?.message);
       }
     }
 
+    // Index live products for O(1) matching by ID, SKU, and normalized Title
+    const liveById = new Map();
+    const liveBySku = new Map();
+    const liveByTitle = new Map();
+
+    const registerLive = (lp) => {
+      if (!lp) return;
+      const pid = String(lp.productId ?? lp.id ?? '').trim();
+      const sku = String(lp.sku ?? '').trim().toLowerCase();
+      const title = String(lp.title ?? lp.name ?? '').trim().toLowerCase();
+      if (pid) liveById.set(pid, lp);
+      if (sku) liveBySku.set(sku, lp);
+      if (title) liveByTitle.set(title, lp);
+    };
+
+    liveSellerProducts.forEach(registerLive);
+    livePublicProducts.forEach(registerLive);
+
+    const deletedIds = db.getDeletedProductIds();
+    const activeLocalList = [];
+
+    // 3. Synchronously check each local product against live backend catalog
+    await Promise.all(
+      localList.map(async (p) => {
+        const pIdStr = String(p.id ?? p.productId ?? '').trim();
+        const pSku = String(p.sku ?? '').trim().toLowerCase();
+        const pTitle = String(p.title ?? p.name ?? '').trim().toLowerCase();
+        const numericId = Number(p.productId || (Number.isInteger(Number(p.id)) ? p.id : 0));
+
+        if (deletedIds.has(pIdStr) || (p.productId && deletedIds.has(String(p.productId)))) {
+          return;
+        }
+
+        let match = liveById.get(pIdStr);
+        if (!match && !numericId) {
+          match = (pSku ? liveBySku.get(pSku) : null) || (pTitle ? liveByTitle.get(pTitle) : null);
+        }
+
+        // If product is REJECTED, preserve its REJECTED status so seller can edit and re-upload!
+        const curStatus = String(p.status || p.approvalStatus || '').toUpperCase();
+        if (curStatus === 'REJECTED') {
+          p.status = 'REJECTED';
+          p.approvalStatus = 'REJECTED';
+          p.deletedByAdmin = false;
+          p.active = false;
+          p.rejectionReason = p.rejectionReason || 'Product specifications and details require revision. Please edit details and re-submit for admin approval.';
+          activeLocalList.push(p);
+          return;
+        }
+
+        // If product was previously approved but missing from the live batch:
+        // Check if still accessible on backend or if admin updated status to REJECTED
+        if (!match && !USE_MOCK_API && numericId > 0 && numericId <= 2147483647 && (p.status === 'APPROVED' || p.approvalStatus === 'APPROVED')) {
+          try {
+            const singleRes = await apiClient.get(`/api/products/${numericId}`, { timeout: 5000 });
+            const singleData = singleRes?.data?.data || singleRes?.data;
+            if (singleData && (singleData.id || singleData.productId)) {
+              match = singleData;
+            } else {
+              // Missing from public catalog -> mark as REJECTED so seller can review and re-submit
+              p.status = 'REJECTED';
+              p.approvalStatus = 'REJECTED';
+              p.deletedByAdmin = false;
+              p.active = false;
+              p.rejectionReason = p.rejectionReason || 'Product is not active in the live catalog. Please review and re-submit.';
+              db.updateSellerProduct(cleanId, p.id, {
+                status: 'REJECTED',
+                approvalStatus: 'REJECTED',
+                deletedByAdmin: false,
+                active: false,
+                rejectionReason: p.rejectionReason,
+              });
+              activeLocalList.push(p);
+              return;
+            }
+          } catch (checkErr) {
+            // 404 from public endpoint means product was rejected or unapproved on backend!
+            // NEVER mark as DELETED_BY_ADMIN; keep as REJECTED so seller can edit and re-upload!
+            p.status = 'REJECTED';
+            p.approvalStatus = 'REJECTED';
+            p.deletedByAdmin = false;
+            p.active = false;
+            p.rejectionReason = p.rejectionReason || 'Product details require revision. Please edit details and re-submit for admin approval.';
+            db.updateSellerProduct(cleanId, p.id, {
+              status: 'REJECTED',
+              approvalStatus: 'REJECTED',
+              deletedByAdmin: false,
+              active: false,
+              rejectionReason: p.rejectionReason,
+            });
+            activeLocalList.push(p);
+            return;
+          }
+        }
+
+        if (match) {
+          const matchStatus = String(match.status || match.approvalStatus || '').toUpperCase();
+          if (matchStatus === 'APPROVED') {
+            p.status = 'APPROVED';
+            p.approvalStatus = 'APPROVED';
+            p.active = true;
+          } else if (matchStatus === 'REJECTED') {
+            p.status = 'REJECTED';
+            p.approvalStatus = 'REJECTED';
+            p.active = false;
+          } else {
+            p.status = 'PENDING';
+            p.approvalStatus = 'PENDING';
+            p.active = false;
+          }
+
+          if (match.productId || match.id) {
+            const realId = Number(match.productId || match.id);
+            if (realId) {
+              p.productId = realId;
+              p.id = realId;
+            }
+          }
+          if (match.sellerId) {
+            p.sellerId = match.sellerId;
+          }
+          db.updateSellerProduct(cleanId, p.id, {
+            status: p.status,
+            approvalStatus: p.approvalStatus,
+            active: p.active,
+            id: p.id,
+            productId: p.productId,
+          });
+        }
+
+        activeLocalList.push(p);
+      })
+    );
+
+    // 4. Collect live products that explicitly belong to this seller ID
+    const backendSellerList = [];
+
+    // From dedicated seller endpoint (ensure seller ownership)
+    liveSellerProducts.forEach((lp) => {
+      const lpSellerId = String(lp.sellerId || lp.vendorId || '').replace(/^seller_/, '').trim();
+      const numLpSeller = Number(lpSellerId);
+      const isDifferentSeller = lpSellerId && (lpSellerId !== cleanId && (!numCleanId || numLpSeller !== numCleanId) && (!numericSellerId || numLpSeller !== numericSellerId));
+      if (!isDifferentSeller) {
+        backendSellerList.push(normalizeSellerProduct({ ...lp, sellerId: cleanId }));
+      }
+    });
+
+    // From public catalog
+    livePublicProducts.forEach((lp) => {
+      const lpSellerId = String(lp.sellerId || lp.vendorId || '').replace(/^seller_/, '').trim();
+      const numLpSeller = Number(lpSellerId);
+      const isOwnerSeller =
+        (lpSellerId && lpSellerId === cleanId) ||
+        (numCleanId > 0 && numLpSeller === numCleanId) ||
+        (numericSellerId > 0 && numLpSeller === numericSellerId);
+
+      if (isOwnerSeller) {
+        const lpStatus = String(lp.status || lp.approvalStatus || 'PENDING').toUpperCase();
+        const finalStatus = lpStatus === 'APPROVED' ? 'APPROVED' : (lpStatus === 'REJECTED' ? 'REJECTED' : (lpStatus === 'INACTIVE' ? 'INACTIVE' : 'PENDING'));
+        backendSellerList.push(normalizeSellerProduct({
+          ...lp,
+          status: finalStatus,
+          approvalStatus: finalStatus,
+          active: finalStatus === 'APPROVED',
+          sellerId: cleanId,
+        }));
+      }
+    });
+
     const mergedMap = new Map();
 
-    // 1. Local seller products (created by seller in UI)
-    localList.forEach((p) => {
-      const key = String(p.id || p.productId || p.sku || p.title).trim().toLowerCase();
-      mergedMap.set(key, p);
-    });
+    // Helper to find existing matching key in mergedMap
+    const findExistingKey = (p) => {
+      const idKey = String(p.id ?? p.productId ?? '').trim().toLowerCase();
+      if (idKey && mergedMap.has(idKey)) return idKey;
+      const skuKey = String(p.sku || '').trim().toLowerCase();
+      if (skuKey && skuKey !== '—' && mergedMap.has(skuKey)) return skuKey;
+      const titleKey = String(p.title || p.name || '').trim().toLowerCase();
+      if (titleKey && mergedMap.has(titleKey)) return titleKey;
+      return null;
+    };
 
-    // 2. Live backend products belonging to this seller
+    // Add authoritative live backend products first
     backendSellerList.forEach((p) => {
+      const pIdStr = String(p.id ?? p.productId ?? '');
+      if (deletedIds.has(pIdStr)) return;
       const key = String(p.id || p.productId || p.sku || p.title).trim().toLowerCase();
       mergedMap.set(key, p);
+      if (p.sku && p.sku !== '—') mergedMap.set(String(p.sku).trim().toLowerCase(), p);
+      if (p.title) mergedMap.set(String(p.title).trim().toLowerCase(), p);
     });
 
-    let products = Array.from(mergedMap.values());
+    // Add active local items, retaining deleted-by-admin notice with seller dismiss option
+    activeLocalList.forEach((p) => {
+      const pIdStr = String(p.id ?? p.productId ?? '');
+      if (deletedIds.has(pIdStr)) return;
 
-    // Filter out any deleted products
-    const deletedIds = db.getDeletedProductIds();
+      const matchedKey = findExistingKey(p);
+      if (matchedKey) {
+        const existing = mergedMap.get(matchedKey);
+        if (p.status === 'DELETED_BY_ADMIN' || p.deletedByAdmin) {
+          mergedMap.set(matchedKey, {
+            ...existing,
+            ...p,
+            status: 'DELETED_BY_ADMIN',
+            approvalStatus: 'DELETED_BY_ADMIN',
+            deletedByAdmin: true,
+            active: false,
+          });
+        } else {
+          // Live backend status takes priority (e.g. PENDING over old local REJECTED)
+          mergedMap.set(matchedKey, { ...p, ...existing });
+        }
+      } else {
+        if (p.status === 'DELETED_BY_ADMIN' || p.approvalStatus === 'DELETED_BY_ADMIN' || p.deletedByAdmin) {
+          const key = String(p.id || p.productId || p.sku || p.title).trim().toLowerCase();
+          mergedMap.set(key, {
+            ...p,
+            status: 'DELETED_BY_ADMIN',
+            approvalStatus: 'DELETED_BY_ADMIN',
+            deletedByAdmin: true,
+            active: false,
+          });
+          return;
+        }
+
+        const isBackendId = Number.isInteger(Number(p.id)) && Number(p.id) > 0;
+        const isProdBackendId = Number.isInteger(Number(p.productId)) && Number(p.productId) > 0;
+        const wasApproved = p.status === 'APPROVED' || p.approvalStatus === 'APPROVED';
+
+        if ((isBackendId || isProdBackendId) && wasApproved) {
+          // If a previously approved product is not in the live public catalog, mark as REJECTED so seller can review and re-submit
+          const flagged = {
+            ...p,
+            status: 'REJECTED',
+            approvalStatus: 'REJECTED',
+            deletedByAdmin: false,
+            active: false,
+            rejectionReason: p.rejectionReason || 'Product is pending review or requires revision from admin. Click "Edit & Re-submit" to update.',
+          };
+          db.updateSellerProduct(cleanId, p.id, flagged);
+          const key = String(p.id || p.productId || p.sku || p.title).trim().toLowerCase();
+          mergedMap.set(key, flagged);
+          return;
+        }
+
+        const key = String(p.id || p.productId || p.sku || p.title).trim().toLowerCase();
+        mergedMap.set(key, p);
+      }
+    });
+
+    // Deduplicate merged products by unique product ID / SKU
+    const seenIds = new Set();
+    const rawProducts = [];
+    Array.from(mergedMap.values()).forEach((prod) => {
+      const uKey = String(prod.id ?? prod.productId ?? prod.sku ?? prod.title).toLowerCase();
+      if (!seenIds.has(uKey)) {
+        seenIds.add(uKey);
+        rawProducts.push(prod);
+      }
+    });
+    let products = rawProducts;
+
+    // Filter out any deleted products with comprehensive prefix matching (NEVER filter out REJECTED or PENDING products)
+    const freshDeletedIds = db.getDeletedProductIds();
     products = products.filter((p) => {
-      const pId = String(p.id ?? p.productId ?? '');
-      const pProdId = String(p.productId ?? p.id ?? '');
-      return !deletedIds.has(pId) && !deletedIds.has(pProdId);
+      const curStatus = String(p.status || p.approvalStatus || '').toUpperCase();
+      if (curStatus === 'REJECTED' || curStatus === 'PENDING') return true;
+
+      const isDel = (val) => {
+        if (!val) return false;
+        const s = String(val).trim();
+        const raw = s.replace(/^sp_/, '');
+        return freshDeletedIds.has(s) || freshDeletedIds.has(raw) || freshDeletedIds.has(`sp_${raw}`);
+      };
+      return !isDel(p.id) && !isDel(p.productId);
     });
 
     // Sort: PENDING products always appear at the top, then newest by ID
@@ -276,7 +568,14 @@ export const sellerProductService = {
     }
 
     if (filters.status && filters.status !== 'All') {
-      products = products.filter((p) => p.status.toUpperCase() === filters.status.toUpperCase());
+      const targetStatus = filters.status.toUpperCase();
+      products = products.filter((p) => {
+        const curStatus = String(p.status || p.approvalStatus || '').toUpperCase();
+        if (targetStatus === 'DELETED_BY_ADMIN' || targetStatus === 'DELETED') {
+          return curStatus === 'DELETED_BY_ADMIN' || curStatus === 'DELETED' || Boolean(p.deletedByAdmin);
+        }
+        return curStatus === targetStatus;
+      });
     }
 
     if (filters.stockStatus && filters.stockStatus !== 'All') {
@@ -413,7 +712,7 @@ export const sellerProductService = {
    */
   async syncProductToBackend(productData) {
     const currentSeller = db.getSeller();
-    const sellerId = String(currentSeller?.id || '9');
+    const sellerId = String(currentSeller?.sellerId || currentSeller?.id || '');
 
     const rawCatName = productData.categoryName || productData.category || 'Pencils';
     const rawSubName = productData.subcategoryName || productData.subcategory || 'Color Pencil';
@@ -434,7 +733,7 @@ export const sellerProductService = {
    */
   async updateProductCatalog(productData) {
     const currentSeller = db.getSeller();
-    const rawSellerId = currentSeller?.sellerId || currentSeller?.id || '9';
+    const rawSellerId = currentSeller?.sellerId || currentSeller?.id || '';
     const numericSellerId = resolveNumericSellerId(rawSellerId);
     const sellerId = String(rawSellerId);
 
@@ -512,36 +811,90 @@ export const sellerProductService = {
    */
   async getSellerProductById(id) {
     if (!id) return null;
+    const cleanIdStr = String(id).trim();
     const currentSeller = db.getSeller();
-    const rawSellerId = currentSeller?.sellerId || currentSeller?.id || '9';
-    const sellerId = String(rawSellerId);
+    const storedSellerId = typeof localStorage !== 'undefined' ? localStorage.getItem('sellerId') : null;
+    const currentAuth = db.getAuth();
+    const rawSellerId = storedSellerId || currentAuth?.user?.sellerId || currentAuth?.user?.id || currentSeller?.sellerId || currentSeller?.id || '';
+    const cleanId = String(rawSellerId).replace(/^seller_/, '').trim();
+    const sellerId = cleanId ? `seller_${cleanId}` : '';
 
-    // 1. Check local database store
-    const localProduct = db.getSellerProductById(sellerId, id) || db.getProductById(id);
-    if (localProduct) {
-      return normalizeSellerProduct(localProduct);
+    // 1. Check local database store first (using seller key, findProductById, and central products)
+    let localProduct = db.getSellerProductById(sellerId, id) || db.findProductById(id) || db.getProductById(id);
+    const isRejectedOrPending = localProduct && (
+      String(localProduct.status || '').toUpperCase() === 'REJECTED' ||
+      String(localProduct.approvalStatus || '').toUpperCase() === 'REJECTED' ||
+      String(localProduct.status || '').toUpperCase() === 'PENDING' ||
+      String(localProduct.approvalStatus || '').toUpperCase() === 'PENDING'
+    );
+
+    if (!isRejectedOrPending && db.getDeletedProductIds().has(cleanIdStr)) {
+      return null;
     }
 
-    // 3. Try live backend API (seller and public routes)
+    // 2. Query live backend API for this product to guarantee fresh approval & live catalog status
     if (!USE_MOCK_API) {
       try {
-        let response;
-        if (hasValidLiveAuth()) {
-          try {
-            response = await apiClient.get(`/api/seller/products/${id}`);
-          } catch (e) {
-            response = await apiClient.get(`/api/products/${id}`);
+        let response = null;
+        try {
+          response = await apiClient.get(`/api/products/${id}`, { timeout: 3500 });
+        } catch (err) {
+          const status = err?.response?.status || err?.response?.data?.statusCode;
+          const msg = err?.response?.data?.message || err?.message || '';
+
+          // If public endpoint returns 404, the product is NOT public yet (it is either PENDING or REJECTED by admin).
+          // NEVER purge or delete from seller store! Preserve local product with its current status.
+          if (status === 404 || msg.toLowerCase().includes('not found')) {
+            if (localProduct) {
+              return normalizeSellerProduct(localProduct);
+            }
           }
-        } else {
-          response = await apiClient.get(`/api/products/${id}`);
+
+          // If query by ID failed with other error and local product has SKU or title, try searching catalog
+          if (localProduct?.title) {
+            try {
+              const searchRes = await apiClient.get('/api/products', { params: { search: localProduct.title, limit: 5 }, timeout: 3500 });
+              const prods = searchRes.data?.data || searchRes.data || [];
+              const items = Array.isArray(prods) ? prods : (prods.products || []);
+              const found = items.find(
+                (p) => String(p.sku || '').toLowerCase() === String(localProduct.sku || '').toLowerCase() ||
+                       String(p.title || '').toLowerCase() === String(localProduct.title || '').toLowerCase()
+              );
+              if (found) response = { data: found };
+            } catch (_) {}
+          }
         }
-        const rawData = response.data?.data || response.data;
-        if (rawData && (rawData.id || rawData.productId || rawData.title || rawData.name)) {
-          return normalizeSellerProduct(rawData);
+
+        const rawData = response?.data?.data || response?.data;
+        if (rawData && (rawData.id || rawData.productId)) {
+          const rawStatus = String(rawData.status || rawData.approvalStatus || '').toUpperCase();
+          const isApproved = rawStatus === 'APPROVED' || rawStatus === 'ACTIVE' || Boolean(rawData.active);
+
+          if (localProduct) {
+            if (isApproved) {
+              localProduct.status = 'APPROVED';
+              localProduct.approvalStatus = 'APPROVED';
+              localProduct.active = true;
+              db.updateSellerProduct(cleanId, id, {
+                status: 'APPROVED',
+                approvalStatus: 'APPROVED',
+                active: true,
+                ...(rawData.productId || rawData.id ? { productId: Number(rawData.productId || rawData.id), id: Number(rawData.productId || rawData.id) } : {}),
+              });
+            }
+            return normalizeSellerProduct(localProduct);
+          } else {
+            return normalizeSellerProduct({ ...rawData, status: isApproved ? 'APPROVED' : rawData.status });
+          }
         }
       } catch (apiError) {
-        // Fallback to catalog search
+        // Fall through to localProduct
       }
+    }
+
+    if (localProduct && (isRejectedOrPending || !db.getDeletedProductIds().has(cleanIdStr))) {
+      return normalizeSellerProduct(localProduct);
+    }
 
       // 4. Try querying catalog list in case the item is in the live batch
       try {
@@ -555,7 +908,6 @@ export const sellerProductService = {
           return normalizeSellerProduct(found);
         }
       } catch (_) {}
-    }
 
     await delay(30);
     const allProds = db.getProducts();
@@ -573,10 +925,11 @@ export const sellerProductService = {
     const currentSeller = db.getSeller();
     const storedSellerId = typeof localStorage !== 'undefined' ? localStorage.getItem('sellerId') : null;
     const currentAuth = db.getAuth();
-    const rawSellerId = storedSellerId || currentAuth?.user?.sellerId || currentAuth?.user?.id || currentSeller?.sellerId || currentSeller?.id;
-    const cleanSellerId = String(rawSellerId || '').replace(/^seller_/, '');
-    const numericSellerId = resolveNumericSellerId(rawSellerId);
-    const sellerId = cleanSellerId ? `seller_${cleanSellerId}` : '';
+    const rawSellerId = storedSellerId || currentAuth?.user?.sellerId || currentAuth?.user?.id || currentSeller?.sellerId || currentSeller?.id || '';
+    const cleanSellerId = String(rawSellerId || '').replace(/^seller_/, '').trim();
+    const cleanId = cleanSellerId || '';
+    const numericSellerId = resolveNumericSellerId(rawSellerId) || Number(cleanId) || 0;
+    const sellerId = cleanId ? `seller_${cleanId}` : '';
 
     const title = productData.title || productData.name;
     const price = Number(productData.price ?? productData.sellingPrice ?? 0);
@@ -599,10 +952,14 @@ export const sellerProductService = {
       rawBrandName
     );
 
-    const validUnit = String(productData.unit || 'PIECE').toUpperCase();
+    const validUnit = String(productData.unit || 'Pieces').trim();
     const parsedGst = Math.max(0, Math.min(100, parseInt(productData.gstRate ?? productData.gst ?? 18, 10) || 18));
     const parsedMoq = Math.max(1, parseInt(productData.moq || 1, 10) || 1);
     const parsedStock = Math.max(0, parseInt(productData.stockQty ?? productData.stock ?? 0, 10) || 0);
+
+    const finalBrandId = Number.isInteger(Number(brandId)) && Number(brandId) > 0
+      ? Number(brandId)
+      : (Number.isInteger(Number(productData.brandId)) && Number(productData.brandId) > 0 ? Number(productData.brandId) : 1);
 
     const payload = {
       name: title,
@@ -614,56 +971,71 @@ export const sellerProductService = {
       categoryName: catName,
       subcategoryId: subId || undefined,
       subcategoryName: subName,
-      brandId: brandId || undefined,
+      brandId: finalBrandId,
       brandName: brandName,
       brand: brandName,
       price,
-      sellingPrice: price,
-      mrp,
+      sellingPrice: productData.sellingPrice !== undefined ? Number(productData.sellingPrice) : price,
+      mrp: productData.mrp !== undefined ? Number(productData.mrp) : (mrp || price),
       unit: validUnit,
       moq: parsedMoq,
       stock: parsedStock,
       stockQty: parsedStock,
-      hsn: String(productData.hsn || productData.hsnCode || '7214'),
-      hsnCode: String(productData.hsnCode || productData.hsn || '7214'),
+      hsn: String(productData.hsn || productData.hsnCode || '').trim(),
+      hsnCode: String(productData.hsnCode || productData.hsn || '').trim(),
       gstRate: parsedGst,
       gst: parsedGst,
       is24HourDelivery: Boolean(productData.is24HourDelivery),
       imageUrl: images[0] || productData.imageUrl || null,
       images,
-      bulkPricingTiers: (productData.bulkPricingTiers || []).map((t, idx) => ({
-        tierId: t.tierId || idx + 1,
+      bulkPricingTiers: (productData.bulkPricingTiers || []).map((t) => ({
         minQty: Math.max(1, parseInt(t.minQty || 1, 10) || 1),
-        maxQty: t.maxQty !== null && t.maxQty !== undefined ? Math.max(1, parseInt(t.maxQty, 10)) : null,
+        maxQty: t.maxQty !== null && t.maxQty !== undefined && t.maxQty !== '' ? Math.max(1, parseInt(t.maxQty, 10)) : null,
         price: Number(t.price ?? t.pricePerUnit ?? 0),
         discountPercentage: Number(t.discountPercentage ?? t.discount ?? 0),
       })),
       specifications: productData.specifications || {},
-      active: productData.active !== undefined ? Boolean(productData.active) : true,
-      status: productData.status || 'PENDING',
-      approvalStatus: productData.approvalStatus || 'PENDING',
+      active: false,
+      status: 'PENDING',
+      approvalStatus: 'PENDING',
       sellerId: numericSellerId,
       vendorId: numericSellerId,
+      storeId: 1, // Store 1 in Spring Boot MySQL catalog
     };
 
     let realProdId = null;
     let createdItem = null;
+    let syncErrorMsg = null;
 
     if (!USE_MOCK_API) {
       try {
         // 1. Try official POST /api/seller/products (attaches Authorization Bearer token & X-Seller-Id)
-        let response;
+        let response = null;
         try {
           response = await apiClient.post('/api/seller/products', payload);
         } catch (sellerErr) {
-          if (sellerErr.response?.status === 401 || sellerErr.response?.status === 404 || sellerErr.response?.status === 405) {
-            // Live backend product creation endpoint fallback: POST /api/products
+          syncErrorMsg = sellerErr.response?.data?.message || sellerErr.response?.statusText || sellerErr.message;
+          // Fallback 1: Try general product endpoint POST /api/products
+          try {
             response = await apiClient.post('/api/products', payload);
-          } else {
-            throw sellerErr;
+            syncErrorMsg = null; // Succeeded on fallback
+          } catch (prodErr) {
+            syncErrorMsg = prodErr.response?.data?.message || `HTTP ${prodErr.response?.status}: ${prodErr.response?.statusText || prodErr.message}`;
+            // Fallback 2: Try admin-assisted seller endpoint POST /api/admin/products/sellers/{sellerId}
+            if (numericSellerId) {
+              try {
+                response = await apiClient.post(`/api/admin/products/sellers/${numericSellerId}`, payload);
+                syncErrorMsg = null;
+              } catch (adminErr) {
+                syncErrorMsg = `HTTP ${sellerErr.response?.status || 403}: Backend access denied (${sellerErr.response?.statusText || 'Forbidden'}). Ensure seller role is enabled in Spring Boot.`;
+                console.warn('Backend product creation notice:', adminErr?.message || prodErr?.message || sellerErr?.message);
+              }
+            } else {
+              console.warn('Backend product creation notice:', prodErr?.message || sellerErr?.message);
+            }
           }
         }
-        createdItem = response.data?.data || response.data;
+        createdItem = response?.data?.data || response?.data?.product || response?.data;
         if (createdItem) {
           const rawId = createdItem.productId ?? createdItem.id;
           if (typeof rawId === 'string' && rawId.startsWith('sp_')) {
@@ -675,7 +1047,11 @@ export const sellerProductService = {
           }
         }
       } catch (apiError) {
-        if (apiError.response?.status === 409) {
+        syncErrorMsg = apiError.response?.data?.message || `HTTP ${apiError.response?.status || 'Error'}: ${apiError.message}`;
+        if (apiError.response?.status === 400) {
+          const validationMsg = apiError.response?.data?.message || 'Validation failed on backend. Preserving product locally for review.';
+          console.warn('Backend product creation warning:', validationMsg);
+        } else if (apiError.response?.status === 409) {
           console.log(`Product "${title}" already exists on backend, tracking locally with PENDING status.`);
         } else {
           console.warn('Backend create product notice:', apiError?.response?.data?.message || apiError.message);
@@ -684,8 +1060,6 @@ export const sellerProductService = {
     }
 
     const finalId = realProdId || (Math.floor(Date.now() % 1000000) + 7000);
-    const cleanId = String(sellerId).replace(/^seller_/, '');
-
     // Auto-register Category in seller local catalog if not already present
     if (catName && catName !== 'Category') {
       const existingCats = db.getSellerCategories(cleanId);
@@ -749,8 +1123,11 @@ export const sellerProductService = {
       brandId: brandId,
       status: 'PENDING',
       approvalStatus: 'PENDING',
+      active: false,
+      backendSyncNotice: syncErrorMsg,
+      isLiveBackend: Boolean(realProdId),
     });
-    return normalizeSellerProduct(created);
+    return normalizeSellerProduct({ ...created, backendSyncNotice: syncErrorMsg, isLiveBackend: Boolean(realProdId) });
   },
 
   /**
@@ -760,37 +1137,145 @@ export const sellerProductService = {
     const storedSellerId = typeof localStorage !== 'undefined' ? localStorage.getItem('sellerId') : null;
     const currentSeller = db.getSeller();
     const currentAuth = db.getAuth();
-    const rawSellerId = storedSellerId || currentAuth?.user?.sellerId || currentAuth?.user?.id || currentSeller?.sellerId || currentSeller?.id;
-    const sellerId = String(rawSellerId || '');
+    const rawSellerId = storedSellerId || currentAuth?.user?.sellerId || currentAuth?.user?.id || currentSeller?.sellerId || currentSeller?.id || '';
+    const cleanSellerId = String(rawSellerId || '').replace(/^seller_/, '').trim();
+    const cleanId = cleanSellerId || '';
+    const numericSellerId = resolveNumericSellerId(rawSellerId) || Number(cleanId) || 0;
+    const sellerId = cleanId ? `seller_${cleanId}` : '';
 
+    const localProd = db.findProductById(id) || {};
+    const isResubmission =
+      updates.status === 'PENDING' ||
+      updates.approvalStatus === 'PENDING' ||
+      localProd.status === 'REJECTED' ||
+      localProd.approvalStatus === 'REJECTED';
+
+    const title = updates.title || updates.name || localProd.title || localProd.name || 'Product';
+    const rawCatName = updates.categoryName || updates.category || localProd.categoryName || localProd.category || 'Electrical';
+    const rawSubName = updates.subcategoryName || updates.subcategory || localProd.subcategoryName || localProd.subcategory || 'Wires & Cables';
+    const rawBrandName = updates.brandName || updates.brand || localProd.brandName || localProd.brand || 'GVD';
+
+    const { catId, catName, subId, subName, brandId, brandName } = await this.resolveRealBackendTaxonomy(
+      updates.categoryId || localProd.categoryId,
+      rawCatName,
+      updates.subcategoryId || localProd.subcategoryId,
+      rawSubName,
+      updates.brandId || localProd.brandId,
+      rawBrandName
+    );
+
+    const price = Number(updates.price ?? updates.sellingPrice ?? localProd.price ?? localProd.sellingPrice ?? 0);
+    const mrp = Number(updates.mrp ?? localProd.mrp ?? (price ? Math.round(price * 1.15) : 0));
+    const slug = updates.slug || localProd.slug || (title ? title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') : `prod-${Date.now()}`);
+    const images = Array.isArray(updates.images) && updates.images.length > 0
+      ? updates.images
+      : (updates.imageUrl ? [updates.imageUrl] : (Array.isArray(localProd.images) && localProd.images.length > 0 ? localProd.images : (localProd.imageUrl ? [localProd.imageUrl] : [])));
+    const validUnit = String(updates.unit || localProd.unit || 'Pieces').trim();
+    const parsedGst = Math.max(0, Math.min(100, parseInt(updates.gstRate ?? updates.gst ?? localProd.gstRate ?? localProd.gst ?? 18, 10) || 18));
+    const parsedMoq = Math.max(1, parseInt(updates.moq || localProd.moq || 1, 10) || 1);
+    const parsedStock = Math.max(0, parseInt(updates.stockQty ?? updates.stock ?? localProd.stockQty ?? localProd.stock ?? 0, 10) || 0);
+
+    const finalStatus = isResubmission ? 'PENDING' : (updates.status || localProd.status || 'PENDING');
+    const finalApprovalStatus = isResubmission ? 'PENDING' : (updates.approvalStatus || localProd.approvalStatus || 'PENDING');
+
+    const payload = {
+      ...localProd,
+      ...updates,
+      id: Number(id) || id,
+      productId: Number(id) || id,
+      name: title,
+      title,
+      slug,
+      sku: updates.sku || localProd.sku || `SKU-${Math.floor(100000 + Math.random() * 900000)}`,
+      description: updates.description !== undefined ? updates.description : (localProd.description || ''),
+      categoryId: catId || undefined,
+      categoryName: catName,
+      subcategoryId: subId || undefined,
+      subcategoryName: subName,
+      brandId: Number.isInteger(Number(brandId)) && Number(brandId) > 0 ? Number(brandId) : 1,
+      brandName,
+      price,
+      sellingPrice: price,
+      mrp,
+      unit: validUnit,
+      moq: parsedMoq,
+      stock: parsedStock,
+      stockQty: parsedStock,
+      hsn: String(updates.hsn || updates.hsnCode || localProd.hsn || localProd.hsnCode || '').trim(),
+      hsnCode: String(updates.hsnCode || updates.hsn || localProd.hsnCode || localProd.hsn || '').trim(),
+      gstRate: parsedGst,
+      gst: parsedGst,
+      is24HourDelivery: Boolean(updates.is24HourDelivery ?? localProd.is24HourDelivery),
+      imageUrl: images[0] || null,
+      images,
+      specifications: updates.specifications || localProd.specifications || {},
+      bulkPricingTiers: updates.bulkPricingTiers || localProd.bulkPricingTiers || [],
+      active: isResubmission ? false : Boolean(updates.active !== undefined ? updates.active : localProd.active),
+      status: finalStatus,
+      approvalStatus: finalApprovalStatus,
+      deletedByAdmin: false,
+      rejectionReason: isResubmission ? null : (updates.rejectionReason ?? localProd.rejectionReason),
+      reSubmittedAt: isResubmission ? new Date().toISOString() : (updates.reSubmittedAt || localProd.reSubmittedAt),
+      sellerId: numericSellerId,
+      vendorId: numericSellerId,
+      storeId: 1,
+    };
+
+    let createdItem = null;
     if (!USE_MOCK_API) {
       try {
-        let response;
+        let response = null;
         try {
-          response = await apiClient.put(`/api/seller/products/${id}`, updates);
-        } catch (e) {
-          if (e.response?.status === 401 || e.response?.status === 404 || e.response?.status === 405) {
-            response = await apiClient.put(`/api/products/${id}`, updates);
-          } else {
-            throw e;
+          response = await apiClient.put(`/api/seller/products/${id}`, payload);
+        } catch (putErr) {
+          try {
+            response = await apiClient.put(`/api/products/${id}`, payload);
+          } catch (pErr) {
+            // When PUT fails (e.g. 404 because product was removed from backend DB or was only in mock),
+            // submit as a fresh seller product via POST /api/seller/products so it enters the Admin review queue!
+            try {
+              response = await apiClient.post('/api/seller/products', payload);
+            } catch (postErr) {
+              console.warn('Backend POST /api/seller/products notice:', postErr?.response?.data || postErr.message);
+            }
           }
         }
-        const rawData = response.data?.data || response.data;
-        if (rawData) {
-          const norm = normalizeSellerProduct(rawData);
-          db.updateSellerProduct(sellerId, id, updates);
-          db.updateProduct(id, updates);
-          return norm;
-        }
+        createdItem = response?.data?.data || response?.data?.product || response?.data;
       } catch (apiError) {
         console.warn('API updateProduct notice:', apiError?.response?.data || apiError.message);
       }
     }
 
+    if (createdItem) {
+      const newRawId = createdItem.productId ?? createdItem.id;
+      let realProdId = newRawId;
+      if (typeof newRawId === 'string' && newRawId.startsWith('sp_')) {
+        realProdId = parseInt(newRawId.replace('sp_', ''), 10) || newRawId;
+      } else if (typeof newRawId === 'string' && !isNaN(parseInt(newRawId, 10))) {
+        realProdId = parseInt(newRawId, 10);
+      }
+
+      const finalSaved = {
+        ...payload,
+        ...createdItem,
+        id: realProdId || payload.id,
+        productId: realProdId || payload.productId,
+        status: finalStatus,
+        approvalStatus: finalApprovalStatus,
+        active: false,
+        deletedByAdmin: false,
+      };
+
+      db.updateSellerProduct(sellerId, id, finalSaved);
+      if (realProdId && String(realProdId) !== String(id)) {
+        db.createSellerProduct(sellerId, finalSaved);
+      }
+      return normalizeSellerProduct(finalSaved);
+    }
+
     await delay(100);
-    const updated = db.updateSellerProduct(sellerId, id, updates);
-    db.updateProduct(id, updates);
-    return normalizeSellerProduct(updated || { id, ...updates });
+    const updated = db.updateSellerProduct(sellerId, id, payload);
+    return normalizeSellerProduct(updated || { id, ...payload });
   },
 
   /**

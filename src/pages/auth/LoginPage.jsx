@@ -106,15 +106,25 @@ export function LoginPage() {
       });
 
       // Strict Admin Approval & Role Check: Do not navigate to dashboard until approved!
+      const vStatus = String(user?.verificationStatus || result?.seller?.verificationStatus || '').toUpperCase();
+      const oStatus = String(user?.onboardingStatus || result?.seller?.onboardingStatus || '').toUpperCase();
+      const st = String(user?.status || result?.seller?.status || '').toUpperCase();
+
+      const isExplicitlyPending =
+        localStorage.getItem('seller_approved') === 'false' ||
+        vStatus === 'PENDING' ||
+        oStatus === 'PENDING_REVIEW' ||
+        st === 'PENDING';
+
       const isApproved =
-        localStorage.getItem('seller_approved') === 'true' ||
-        user?.verified === true ||
-        result?.seller?.verified === true ||
-        ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(String(user?.verificationStatus || '').toUpperCase()) ||
-        ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(String(user?.onboardingStatus || '').toUpperCase()) ||
-        ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(String(result?.seller?.verificationStatus || '').toUpperCase()) ||
-        ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(String(result?.seller?.onboardingStatus || '').toUpperCase()) ||
-        (String(user?.role || '').toUpperCase() === 'SELLER' && String(user?.onboardingStatus || '').toUpperCase() === 'VERIFIED');
+        !isExplicitlyPending && (
+          localStorage.getItem('seller_approved') === 'true' ||
+          user?.verified === true ||
+          result?.seller?.verified === true ||
+          ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(vStatus) ||
+          ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(oStatus) ||
+          ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(st)
+        );
 
       const role = String(user?.role || user?.claims?.role || '').toUpperCase();
       if (role.includes('ADMIN')) {
@@ -139,10 +149,10 @@ export function LoginPage() {
     } catch (err) {
       console.error('Email login error:', err);
       let errMsg = 'Invalid email or password. Please check your credentials.';
-      if (err.code === 'auth/user-not-found' || err.code === 'auth/invalid-credential') {
-        errMsg = 'No registered seller account found with these credentials.';
-      } else if (err.code === 'auth/wrong-password') {
-        errMsg = 'Incorrect password. Please retry or click Forgot Password.';
+      if (err.code === 'auth/wrong-password' || err.code === 'auth/invalid-credential' || err.code === 'auth/invalid-login-credentials') {
+        errMsg = 'Incorrect password. Please verify your password or click "Forgot Password?" to reset it.';
+      } else if (err.code === 'auth/user-not-found') {
+        errMsg = 'No registered seller account found for this email address. Please click Register to create an account.';
       } else if (err.message) {
         errMsg = err.message;
       }
@@ -307,14 +317,25 @@ export function LoginPage() {
       });
 
       // Strict Admin Approval & Role Check for OTP: Do not navigate to dashboard until approved!
+      const otpVStatus = String(res.seller?.verificationStatus || res.user?.verificationStatus || '').toUpperCase();
+      const otpOStatus = String(res.seller?.onboardingStatus || res.user?.onboardingStatus || '').toUpperCase();
+      const otpSt = String(res.seller?.status || res.user?.status || '').toUpperCase();
+
+      const isOtpExplicitlyPending =
+        localStorage.getItem('seller_approved') === 'false' ||
+        otpVStatus === 'PENDING' ||
+        otpOStatus === 'PENDING_REVIEW' ||
+        otpSt === 'PENDING';
+
       const isOtpApproved =
-        localStorage.getItem('seller_approved') === 'true' ||
-        res.seller?.verified === true ||
-        res.user?.verified === true ||
-        ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(String(res.seller?.verificationStatus || '').toUpperCase()) ||
-        ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(String(res.seller?.onboardingStatus || '').toUpperCase()) ||
-        ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(String(res.user?.verificationStatus || '').toUpperCase()) ||
-        (String(res.user?.role || '').toUpperCase() === 'SELLER' && String(res.user?.onboardingStatus || '').toUpperCase() === 'VERIFIED');
+        !isOtpExplicitlyPending && (
+          localStorage.getItem('seller_approved') === 'true' ||
+          res.seller?.verified === true ||
+          res.user?.verified === true ||
+          ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(otpVStatus) ||
+          ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(otpOStatus) ||
+          ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(otpSt)
+        );
 
       const otpRole = String(res.user?.role || res.seller?.role || '').toUpperCase();
       if (otpRole.includes('ADMIN')) {
@@ -365,40 +386,9 @@ export function LoginPage() {
         <div className="bg-white/95 backdrop-blur-xl py-7 px-6 sm:px-8 shadow-xl shadow-slate-900/5 rounded-2xl border border-slate-200 text-left">
           
           {/* ========================================================================= */}
-          {/* AUTH MODE TOGGLE TABS (Email & Password VS Mobile OTP) */}
+          {/* AUTH MODE (Phone & OTP tab UI hidden as requested, logic preserved) */}
           {/* ========================================================================= */}
-          <div className="grid grid-cols-2 gap-1.5 p-1 bg-slate-100 rounded-xl mb-6">
-            <button
-              type="button"
-              onClick={() => {
-                setAuthMode('EMAIL');
-                setStage('ENTER_PHONE');
-              }}
-              className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                authMode === 'EMAIL'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <KeyRound className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Email & Password</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setAuthMode('PHONE');
-                setStage('ENTER_PHONE');
-              }}
-              className={`py-2 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                authMode === 'PHONE'
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <Phone className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Mobile OTP</span>
-            </button>
-          </div>
+          {/* Mobile OTP tab UI hidden; Email & Password is the primary login */}
 
           {/* ========================================================================= */}
           {/* TAB 1: EMAIL & PASSWORD SIGN IN */}

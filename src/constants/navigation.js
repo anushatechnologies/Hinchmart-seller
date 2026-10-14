@@ -134,6 +134,16 @@ export const NAV_GROUPS = [
       },
     ],
   },
+  {
+    group: 'HELP & SUPPORT',
+    items: [
+      {
+        title: 'Support Desk',
+        path: '/seller/support',
+        icon: 'LifeBuoy',
+      },
+    ],
+  },
 ];
 
 // Flat export for compatibility

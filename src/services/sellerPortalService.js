@@ -23,7 +23,7 @@ export const sellerPortalService = {
     }
 
     await delay(100);
-    return db.getProducts();
+    return db.getSellerProducts();
   },
 
   /**

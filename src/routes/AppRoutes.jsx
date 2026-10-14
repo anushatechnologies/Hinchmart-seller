@@ -83,23 +83,29 @@ import { StoreSetupPage } from '../pages/store/StoreSetupPage';
 
 // Settings
 import { SettingsPage } from '../pages/settings/SettingsPage';
+
+// Support Desk
+import { SupportTicketsPage } from '../pages/support/SupportTicketsPage';
+import { TicketDetailPage } from '../pages/support/TicketDetailPage';
+
 import { useAuthStore } from '../store/authStore';
 
 export function AppRoutes() {
   const { isAuthenticated } = useAuthStore();
+  const isApproved = typeof localStorage !== 'undefined' && localStorage.getItem('seller_approved') === 'true';
 
   return (
     <Routes>
       {/* Root redirect */}
       <Route
         path="/"
-        element={<Navigate to={isAuthenticated ? '/seller/dashboard' : '/login'} replace />}
+        element={<Navigate to={isAuthenticated ? (isApproved ? '/seller/dashboard' : '/pending-approval') : '/login'} replace />}
       />
 
       {/* Public Auth Routes */}
       <Route
         path="/login"
-        element={isAuthenticated ? <Navigate to="/seller/dashboard" replace /> : <LoginPage />}
+        element={isAuthenticated ? (isApproved ? <Navigate to="/seller/dashboard" replace /> : <Navigate to="/pending-approval" replace />) : <LoginPage />}
       />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/verify-otp" element={<VerifyOtpPage />} />
@@ -196,6 +202,12 @@ export function AppRoutes() {
 
         {/* Settings */}
         <Route path="settings" element={<SettingsPage />} />
+
+        {/* Support Desk (Seller Tickets) */}
+        <Route path="support" element={<SupportTicketsPage />} />
+        <Route path="support/:id" element={<TicketDetailPage />} />
+        <Route path="help/tickets" element={<Navigate to="/seller/support" replace />} />
+        <Route path="tickets" element={<Navigate to="/seller/support" replace />} />
       </Route>
 
       {/* Fallback 404 */}

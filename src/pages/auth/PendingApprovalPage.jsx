@@ -13,6 +13,9 @@ import {
   Mail,
   Phone,
   ExternalLink,
+  CreditCard,
+  Shield,
+  FileText,
 } from 'lucide-react';
 import { BrandLogo } from '../../components/common/BrandLogo';
 import { useSellerAuth } from '../../context/SellerAuthContext';
@@ -58,67 +61,124 @@ export function PendingApprovalPage() {
     sellerData?.personalDetails?.phone ||
     '';
 
-  // Check live approval status from backend
+  const localSeller = db.getSeller();
+  const panNumber =
+    localSeller?.panNumber ||
+    localSeller?.pan ||
+    localSeller?.panCardNumber ||
+    localSeller?.legal?.pan ||
+    sellerData?.legalDetails?.pan ||
+    sellerData?.pan ||
+    '';
+  const aadhaarNumber =
+    localSeller?.aadhaarNumber ||
+    localSeller?.aadhaar ||
+    localSeller?.legal?.aadhaar ||
+    sellerData?.personalDetails?.aadhaar ||
+    sellerData?.aadhaar ||
+    '';
+  const gstin =
+    localSeller?.gstin ||
+    localSeller?.gst ||
+    localSeller?.legal?.gstin ||
+    sellerData?.businessTaxDetails?.gstin ||
+    sellerData?.gstin ||
+    '';
+
+  // Check live approval status from backend and local state
   const checkStatus = async (showToast = true) => {
-    if (!sellerId) return;
+    const activeId = sellerId || storeUser?.sellerId || db.getSeller()?.id || (typeof localStorage !== 'undefined' ? localStorage.getItem('sellerId') : null);
+
     setIsChecking(true);
     try {
-      const summary = await sellerOnboardingService.getOnboardingSummary(sellerId);
-      if (summary) {
-        setSellerData(summary);
-        const oStatus = String(summary.onboardingStatus || '').toUpperCase();
-        const vStatus = String(summary.verificationStatus || '').toUpperCase();
-        const isApproved =
-          oStatus === 'VERIFIED' ||
-          oStatus === 'APPROVED' ||
-          oStatus === 'ACTIVE' ||
-          vStatus === 'VERIFIED' ||
-          vStatus === 'APPROVED' ||
-          vStatus === 'ACTIVE';
+      // 1. Check local seller registration status
+      const localSeller = db.getSeller();
+      const isPendingInStorage = localStorage.getItem('seller_approved') === 'false';
+      const localApproved = !isPendingInStorage && (
+        localStorage.getItem('seller_approved') === 'true' ||
+        ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(String(localSeller?.verificationStatus || '').toUpperCase()) ||
+        ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(String(localSeller?.onboardingStatus || '').toUpperCase()) ||
+        ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(String(localSeller?.status || '').toUpperCase())
+      );
 
-        if (isApproved) {
-          setApprovalStatus('APPROVED');
-          localStorage.setItem('seller_approved', 'true');
-          localStorage.setItem('seller_onboarding_status', 'VERIFIED');
-          if (showToast) {
-            addToast({
-              title: 'Account Approved!',
-              message: 'Your seller account has been verified. Welcome to HinchMart!',
-              type: 'success',
-            });
+      // 2. Check live backend summary if seller ID is present
+      let backendApproved = false;
+      let oStatus = '';
+      let vStatus = '';
+
+      if (activeId) {
+        try {
+          const summary = await sellerOnboardingService.getOnboardingSummary(activeId);
+          if (summary) {
+            setSellerData(summary);
+            oStatus = String(
+              summary.onboardingStatus || 
+              summary.data?.onboardingStatus || 
+              summary.data?.overallStatus || 
+              summary.data?.status || 
+              ''
+            ).toUpperCase();
+            vStatus = String(
+              summary.verificationStatus || 
+              summary.data?.verificationStatus || 
+              ''
+            ).toUpperCase();
+
+            backendApproved =
+              oStatus === 'VERIFIED' ||
+              oStatus === 'APPROVED' ||
+              oStatus === 'ACTIVE' ||
+              vStatus === 'VERIFIED' ||
+              vStatus === 'APPROVED' ||
+              vStatus === 'ACTIVE';
           }
-          setTimeout(() => {
-            navigate('/seller/dashboard');
-          }, 1500);
-        } else if (oStatus === 'REJECTED' || vStatus === 'REJECTED') {
-          setApprovalStatus('REJECTED');
-          if (showToast) {
-            addToast({
-              title: 'Application Rejected',
-              message: 'Your application requires revision or was rejected by Admin.',
-              type: 'error',
-            });
-          }
-        } else {
-          setApprovalStatus('PENDING_REVIEW');
-          if (showToast) {
-            addToast({
-              title: 'Under Review',
-              message: 'Your application is still under review by the HinchMart verification team.',
-              type: 'info',
-            });
-          }
+        } catch (_) {}
+      }
+
+      const isApproved = backendApproved || localApproved;
+
+      if (isApproved) {
+        setApprovalStatus('APPROVED');
+        localStorage.setItem('seller_approved', 'true');
+        localStorage.setItem('seller_onboarding_status', 'VERIFIED');
+        db.updateSeller({
+          verificationStatus: 'VERIFIED',
+          onboardingStatus: 'VERIFIED',
+          status: 'ACTIVE',
+          verified: true,
+        });
+        if (showToast) {
+          addToast({
+            title: 'Account Verified!',
+            message: 'Your seller account has been approved. Welcome to HinchMart!',
+            type: 'success',
+          });
+        }
+        setTimeout(() => {
+          navigate('/seller/dashboard');
+        }, 1200);
+      } else if (oStatus === 'REJECTED' || vStatus === 'REJECTED') {
+        setApprovalStatus('REJECTED');
+        if (showToast) {
+          addToast({
+            title: 'Application Rejected',
+            message: 'Your application requires revision or was rejected by Admin.',
+            type: 'error',
+          });
+        }
+      } else {
+        setApprovalStatus('PENDING_REVIEW');
+        localStorage.setItem('seller_approved', 'false');
+        if (showToast) {
+          addToast({
+            title: 'Under Review',
+            message: 'Your application is being verified by the HinchMart team.',
+            type: 'info',
+          });
         }
       }
     } catch (err) {
       console.warn('Status check notice:', err.message);
-      if (showToast) {
-        addToast({
-          title: 'Status Check',
-          message: 'Unable to refresh status at this time. Please try again shortly.',
-          type: 'warning',
-        });
-      }
     } finally {
       setIsChecking(false);
     }
@@ -126,6 +186,35 @@ export function PendingApprovalPage() {
 
   useEffect(() => {
     checkStatus(false);
+    // Poll every 5s so when Admin approves, seller automatically navigates to dashboard
+    const pollInterval = setInterval(() => {
+      checkStatus(false);
+    }, 5000);
+
+    const handleStorageChange = (e) => {
+      if (e.key === 'seller_approved' && e.newValue === 'true') {
+        checkStatus(true);
+      }
+    };
+    window.addEventListener('storage', handleStorageChange);
+
+    let bc = null;
+    try {
+      if (typeof BroadcastChannel !== 'undefined') {
+        bc = new BroadcastChannel('hinchmart_seller_approval_sync');
+        bc.onmessage = (msg) => {
+          if (msg.data?.type === 'SELLER_APPROVED') {
+            checkStatus(true);
+          }
+        };
+      }
+    } catch (_) {}
+
+    return () => {
+      clearInterval(pollInterval);
+      window.removeEventListener('storage', handleStorageChange);
+      if (bc) bc.close();
+    };
   }, [sellerId]);
 
   const handleLogout = async () => {
@@ -216,6 +305,38 @@ export function PendingApprovalPage() {
                 <span className="font-medium text-slate-900">+91 {String(sellerPhone).replace(/\D/g, '').slice(-10)}</span>
               </div>
             )}
+
+            {panNumber && (
+              <div className="flex items-center justify-between text-slate-600">
+                <span className="flex items-center gap-1.5">
+                  <CreditCard className="w-3.5 h-3.5 text-slate-400" />
+                  <span>PAN Card Number</span>
+                </span>
+                <span className="font-mono font-bold text-slate-900">{panNumber}</span>
+              </div>
+            )}
+
+            {aadhaarNumber && (
+              <div className="flex items-center justify-between text-slate-600">
+                <span className="flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Aadhaar Number</span>
+                </span>
+                <span className="font-mono font-medium text-slate-900">
+                  XXXX XXXX {String(aadhaarNumber).replace(/\D/g, '').slice(-4)}
+                </span>
+              </div>
+            )}
+
+            {gstin && (
+              <div className="flex items-center justify-between text-slate-600">
+                <span className="flex items-center gap-1.5">
+                  <FileText className="w-3.5 h-3.5 text-slate-400" />
+                  <span>GSTIN Number</span>
+                </span>
+                <span className="font-mono font-bold text-emerald-800">{gstin}</span>
+              </div>
+            )}
           </div>
 
           {/* Verification Steps Audit Trail */}
@@ -253,15 +374,27 @@ export function PendingApprovalPage() {
               <span>{isChecking ? 'Checking Approval Status...' : 'Check Approval Status'}</span>
             </button>
 
-            {approvalStatus === 'APPROVED' && (
+            {approvalStatus === 'APPROVED' ? (
               <button
                 type="button"
-                onClick={() => navigate('/seller/dashboard')}
-                className="w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
+                onClick={() => {
+                  localStorage.setItem('seller_approved', 'true');
+                  localStorage.setItem('seller_onboarding_status', 'VERIFIED');
+                  if (sellerId && !localStorage.getItem('sellerId')) {
+                    localStorage.setItem('sellerId', String(sellerId));
+                  }
+                  navigate('/seller/dashboard');
+                }}
+                className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
               >
                 <span>Enter Seller Dashboard</span>
                 <ArrowRight className="w-4 h-4" />
               </button>
+            ) : (
+              <div className="w-full py-3 px-4 bg-amber-50 border border-amber-200 text-amber-800 font-semibold text-xs rounded-xl flex items-center justify-center gap-2">
+                <Clock className="w-4 h-4 text-amber-600 animate-spin shrink-0" />
+                <span>Pending Admin Approval — Dashboard is Locked</span>
+              </div>
             )}
 
             <button

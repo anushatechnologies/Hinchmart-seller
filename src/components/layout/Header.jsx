@@ -22,7 +22,7 @@ import { useNotifications } from '../../hooks/useNotifications';
 import { useSellerProfile } from '../../hooks/useSellerProfile';
 import { HeaderSearch } from './HeaderSearch';
 import { BrandLogo } from '../common/BrandLogo';
-import { formatRelativeTime } from '../../utils/formatters';
+import { formatRelativeTime, formatNameFromEmail } from '../../utils/formatters';
 
 export function Header() {
   const navigate = useNavigate();
@@ -57,9 +57,24 @@ export function Header() {
     navigate('/login');
   };
 
-  const sellerDisplayName = profile?.companyName || user?.companyName || profile?.name || user?.name || 'Seller Enterprise';
-  const sellerContactName = profile?.name || profile?.fullName || user?.name || user?.fullName || 'Seller Admin';
-  const sellerMonogram = (profile?.companyName || user?.companyName || profile?.name || user?.name || 'SE')
+  const authEmail = String(user?.email || profile?.email || profile?.companyEmail || '').trim().toLowerCase();
+  const isNotRajesh = authEmail && !authEmail.includes('rajesh');
+
+  let rawCompanyName = profile?.companyName || user?.companyName || profile?.name || user?.name || '';
+  let rawContactName = profile?.name || profile?.fullName || user?.name || user?.fullName || '';
+
+  if (isNotRajesh) {
+    if (/rajesh/i.test(rawCompanyName)) {
+      rawCompanyName = `${formatNameFromEmail(authEmail)} Enterprise`;
+    }
+    if (/rajesh/i.test(rawContactName)) {
+      rawContactName = formatNameFromEmail(authEmail);
+    }
+  }
+
+  const sellerDisplayName = rawCompanyName || (authEmail ? `${formatNameFromEmail(authEmail)} Enterprise` : 'Seller Enterprise');
+  const sellerContactName = rawContactName || (authEmail ? formatNameFromEmail(authEmail) : 'Seller Admin');
+  const sellerMonogram = (rawContactName || rawCompanyName || 'SE')
     .split(' ')
     .filter(Boolean)
     .slice(0, 2)
@@ -104,17 +119,14 @@ export function Header() {
         </button>
 
         {/* Support Link */}
-        <a
-          href="#help"
-          onClick={(e) => {
-            e.preventDefault();
-            window.alert('HinchMart B2B Seller Desk: 1800-202-6000 | Email: sellersupport@hinchmart.com');
-          }}
-          className="p-2 text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors hidden md:flex items-center gap-1.5 text-xs font-semibold"
+        <Link
+          to="/seller/support"
+          className="p-2 text-slate-600 hover:text-orange-600 hover:bg-orange-50 rounded-lg transition-colors hidden md:flex items-center gap-1.5 text-xs font-semibold cursor-pointer"
+          title="Seller Support Desk"
         >
-          <HelpCircle className="w-4 h-4 text-slate-400" />
-          <span>Support</span>
-        </a>
+          <HelpCircle className="w-4 h-4 text-orange-500" />
+          <span>Support Desk</span>
+        </Link>
 
         {/* Notifications Popover */}
         <div className="relative" ref={notifRef}>

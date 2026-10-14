@@ -44,7 +44,7 @@ export const SellerAuthProvider = ({ children }) => {
             },
             {
               headers: { Authorization: `Bearer ${token}` },
-              timeout: 10000,
+              timeout: 3500,
             }
           );
           profile = response.data?.data || response.data;
@@ -63,8 +63,10 @@ export const SellerAuthProvider = ({ children }) => {
           }
         }
 
-        // If backend responded, use profile; otherwise fallback gracefully
-        const cleanSellerId = profile?.sellerId || db.getSeller()?.id || 9;
+        // If backend responded, use profile; otherwise preserve authenticated seller ID
+        const existingStoredId = typeof localStorage !== 'undefined' ? localStorage.getItem('sellerId') : null;
+        const authUserId = db.getAuth()?.user?.sellerId || db.getAuth()?.user?.id;
+        const cleanSellerId = profile?.sellerId || existingStoredId || authUserId || db.getSeller()?.id || (firebaseUser.phoneNumber ? firebaseUser.phoneNumber.replace(/\D/g, '').slice(-10) : (firebaseUser.email ? firebaseUser.email.split('@')[0] : null));
         const cleanRole = profile?.role || (cleanSellerId ? 'SELLER' : 'CUSTOMER');
 
         const resolvedProfile = {
@@ -118,12 +120,18 @@ export const SellerAuthProvider = ({ children }) => {
     return syncPromise;
   };
 
+  const isInitialAuthRef = React.useRef(true);
   const lastUidRef = React.useRef(null);
 
   // Listen to Firebase auth state changes
   useEffect(() => {
     const unsubscribe = onIdTokenChanged(auth, async (firebaseUser) => {
-      setLoading(true);
+      const isSwitchingAccount = firebaseUser && lastUidRef.current && lastUidRef.current !== firebaseUser.uid;
+      // Only set blocking loading on initial app boot or when switching accounts
+      if (isInitialAuthRef.current || isSwitchingAccount) {
+        setLoading(true);
+      }
+
       if (firebaseUser) {
         if (lastUidRef.current && lastUidRef.current !== firebaseUser.uid) {
           resetSellerApiPermissions();
@@ -139,11 +147,18 @@ export const SellerAuthProvider = ({ children }) => {
         lastUidRef.current = null;
         setUser(null);
         setSellerProfile(null);
-        localStorage.removeItem('sellerId');
-        localStorage.removeItem('seller_role');
-        localStorage.removeItem('seller_onboarding_status');
+        // Only clear storage if not authenticated via local database/store session
+        const localAuth = db.getAuth();
+        if (!localAuth?.isAuthenticated) {
+          localStorage.removeItem('sellerId');
+          localStorage.removeItem('seller_role');
+          localStorage.removeItem('seller_onboarding_status');
+          localStorage.removeItem('seller_approved');
+        }
         resetSellerApiPermissions();
       }
+
+      isInitialAuthRef.current = false;
       setLoading(false);
     });
     return () => unsubscribe();

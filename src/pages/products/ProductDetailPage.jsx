@@ -25,6 +25,7 @@ import {
   Download,
   FileSpreadsheet,
   CheckCircle2,
+  XCircle,
 } from 'lucide-react';
 import { useProduct, useProducts } from '../../hooks/useProducts';
 import { useInventory } from '../../hooks/useInventory';
@@ -32,6 +33,7 @@ import { getProductImageUrl, getCleanProductImages } from '../../utils/productIm
 import { usePricing } from '../../hooks/usePricing';
 import { useOrders } from '../../hooks/useOrders';
 import { StatusBadge } from '../../components/common/Badge';
+import { ProductStatusBadge } from '../../components/products/ProductStatusBadge';
 import { Button } from '../../components/common/Button';
 import { Skeleton } from '../../components/common/Skeleton';
 import { ConfirmationDialog } from '../../components/common/ConfirmationDialog';
@@ -55,6 +57,35 @@ export function ProductDetailPage() {
   const [showStockModal, setShowStockModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showArchiveModal, setShowArchiveModal] = useState(false);
+
+  // Extract and normalize specifications entries (MUST be before any early returns to satisfy React Rules of Hooks)
+  const specsEntries = React.useMemo(() => {
+    let rawSpecs = product?.specifications ?? product?.specs ?? product?.technicalSpecifications ?? product?.attributes ?? {};
+    if (typeof rawSpecs === 'string') {
+      try {
+        rawSpecs = JSON.parse(rawSpecs);
+      } catch (_) {
+        const parsedMap = {};
+        rawSpecs.split(',').forEach((part) => {
+          const [k, ...v] = part.split(':');
+          if (k && v.length) parsedMap[k.trim()] = v.join(':').trim();
+        });
+        rawSpecs = parsedMap;
+      }
+    }
+    if (Array.isArray(rawSpecs)) {
+      const converted = {};
+      rawSpecs.forEach((item) => {
+        const k = item?.key || item?.name || item?.attributeName || item?.label;
+        if (k) converted[k] = item?.value ?? item?.val ?? '';
+      });
+      rawSpecs = converted;
+    }
+    if (typeof rawSpecs === 'object' && rawSpecs !== null) {
+      return Object.entries(rawSpecs).filter(([k, v]) => v !== undefined && v !== null && String(v).trim() !== '');
+    }
+    return [];
+  }, [product]);
 
   const handleBack = () => {
     if (location.state?.from) {
@@ -100,6 +131,16 @@ export function ProductDetailPage() {
   const warehouse = warehouses.find((w) => w.id === product.warehouseId) || warehouses[0] || { name: 'Central Hub', city: 'Mumbai' };
   const isLowStock = product.stock > 0 && product.stock <= (product.lowStockThreshold || 0);
   const isOut = (product.stock || 0) === 0;
+  const isRejected = product?.status === 'REJECTED' || product?.approvalStatus === 'REJECTED';
+
+  const isDeletedByAdmin =
+    !isRejected && (
+      product?.status === 'DELETED_BY_ADMIN' ||
+      product?.status === 'DELETED' ||
+      product?.status === 'REMOVED_BY_ADMIN' ||
+      product?.approvalStatus === 'DELETED_BY_ADMIN' ||
+      Boolean(product?.deletedByAdmin)
+    );
 
   // Filter orders containing this product
   const productOrders = orders.filter((o) =>
@@ -150,7 +191,7 @@ export function ProductDetailPage() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-extrabold text-slate-900">{product.name}</h1>
-              <StatusBadge status={product.status} />
+              <ProductStatusBadge status={isDeletedByAdmin ? 'DELETED_BY_ADMIN' : product.status} product={product} />
             </div>
             <p className="text-xs text-slate-500 font-mono mt-0.5">
               Product ID: <strong className="text-slate-800">{product.id}</strong> • SKU: <strong className="text-slate-800">{product.sku}</strong> • HSN: {product.hsnCode || '—'}
@@ -160,49 +201,133 @@ export function ProductDetailPage() {
 
         {/* Action Buttons */}
         <div className="flex flex-wrap items-center gap-2">
-          <Link to={`/seller/products/${id}/edit`}>
-            <Button variant="primary" size="sm" leftIcon={Edit2}>
-              Edit Product
+          {isDeletedByAdmin ? (
+            <Button
+              variant="danger"
+              size="sm"
+              onClick={() => setShowDeleteModal(true)}
+              leftIcon={Trash2}
+            >
+              Remove from My List
+            </Button>
+          ) : isRejected ? (
+            <>
+              <Link to={`/seller/products/${id}/edit`}>
+                <Button variant="primary" size="sm" leftIcon={Edit2} className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-black shadow-xs">
+                  Edit & Re-submit
+                </Button>
+              </Link>
+
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => setShowDeleteModal(true)}
+                leftIcon={Trash2}
+              >
+                Delete
+              </Button>
+            </>
+          ) : (
+            <>
+              <Link to={`/seller/products/${id}/edit`}>
+                <Button variant="primary" size="sm" leftIcon={Edit2}>
+                  Edit Product
+                </Button>
+              </Link>
+
+              <Link to="/seller/products/labels" state={{ selectedProductId: product.id }}>
+                <Button variant="secondary" size="sm" leftIcon={QrCode}>
+                  Generate Label
+                </Button>
+              </Link>
+
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={async () => {
+                  const res = await duplicateProduct(product.id);
+                  navigate(`/seller/products/${res.id}/edit`);
+                }}
+                leftIcon={Copy}
+              >
+                Duplicate
+              </Button>
+
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => setShowArchiveModal(true)}
+                leftIcon={Archive}
+              >
+                Archive
+              </Button>
+
+              <Button
+                variant="danger"
+                size="sm"
+                onClick={() => setShowDeleteModal(true)}
+                leftIcon={Trash2}
+              >
+                Delete
+              </Button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Rejected by Admin Banner */}
+      {isRejected && (
+        <div className="p-4 rounded-xl bg-amber-50 border-2 border-amber-300 text-amber-950 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
+          <div className="flex items-start gap-3">
+            <XCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="px-2 py-0.5 rounded text-[10px] font-black bg-rose-600 text-white uppercase tracking-wider">
+                  Rejected by Admin
+                </span>
+                <h4 className="font-extrabold text-sm text-slate-900">
+                  Compliance Feedback Received
+                </h4>
+              </div>
+              <p className="text-xs text-rose-950 font-semibold mt-1">
+                Reason: <span className="font-normal text-rose-800">{product.rejectionReason || 'Specifications, pricing, or product images require revision.'}</span>
+              </p>
+              <p className="text-[11px] text-amber-800 mt-0.5">
+                Click "Edit & Re-submit" to update the listing and return it to Admin review.
+              </p>
+            </div>
+          </div>
+          <Link to={`/seller/products/${id}/edit`} className="shrink-0">
+            <Button variant="primary" size="sm" leftIcon={Edit2} className="bg-amber-500 hover:bg-amber-600 text-slate-950 font-black shadow-xs">
+              Edit & Re-submit
             </Button>
           </Link>
+        </div>
+      )}
 
-          <Link to="/seller/products/labels" state={{ selectedProductId: product.id }}>
-            <Button variant="secondary" size="sm" leftIcon={QrCode}>
-              Generate Label
-            </Button>
-          </Link>
-
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={async () => {
-              const res = await duplicateProduct(product.id);
-              navigate(`/seller/products/${res.id}/edit`);
-            }}
-            leftIcon={Copy}
-          >
-            Duplicate
-          </Button>
-
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setShowArchiveModal(true)}
-            leftIcon={Archive}
-          >
-            Archive
-          </Button>
-
+      {/* Deleted by Admin Warning Banner */}
+      {isDeletedByAdmin && (
+        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-xs">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+            <div>
+              <h4 className="font-bold text-sm text-rose-950">This Product Was Deleted by the Admin</h4>
+              <p className="text-xs text-rose-700 mt-0.5">
+                The administrator removed this listing from the marketplace catalog. It is no longer accessible to buyers.
+              </p>
+            </div>
+          </div>
           <Button
             variant="danger"
             size="sm"
-            onClick={() => setShowDeleteModal(true)}
             leftIcon={Trash2}
+            onClick={() => setShowDeleteModal(true)}
+            className="shrink-0 font-bold"
           >
-            Delete
+            Remove from My List
           </Button>
         </div>
-      </div>
+      )}
 
       {/* 2. Main Grid: Media + Pricing & Details */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
@@ -404,6 +529,24 @@ export function ProductDetailPage() {
                 </div>
               </div>
             )}
+
+            {/* Quick Technical Specifications Snippet */}
+            {specsEntries.length > 0 && (
+              <div className="pt-2">
+                <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <ShieldCheck className="w-3.5 h-3.5 text-amber-500" />
+                  <span>Technical Specifications ({specsEntries.length})</span>
+                </h4>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {specsEntries.map(([k, v]) => (
+                    <div key={k} className="p-2.5 bg-slate-50 rounded-lg border border-slate-200/80 text-xs">
+                      <span className="text-[10px] text-slate-400 font-semibold uppercase block truncate">{k}</span>
+                      <span className="font-bold text-slate-900 block mt-0.5 truncate">{String(v)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -413,7 +556,7 @@ export function ProductDetailPage() {
         <div className="border-b border-slate-200 flex items-center gap-1 px-4 bg-slate-50/70 overflow-x-auto">
           {[
             { id: 'info', label: 'Product Information', icon: Package },
-            { id: 'specs', label: 'Specifications', icon: ShieldCheck },
+            { id: 'specs', label: `Specifications (${specsEntries.length})`, icon: ShieldCheck },
             { id: 'images', label: 'Media Gallery', icon: BookOpen },
             { id: 'docs', label: 'Documents & Brochures', icon: FileText },
             { id: 'inventory', label: 'Inventory & Batch Logs', icon: Boxes },
@@ -477,11 +620,37 @@ export function ProductDetailPage() {
                 </div>
               </div>
 
+              {/* Technical Specifications Box in Information View */}
+              {specsEntries.length > 0 && (
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200/80 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider flex items-center gap-1.5">
+                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                      <span>Technical Specifications & Properties</span>
+                    </h4>
+                    <span className="text-[11px] font-bold text-slate-500 bg-white px-2 py-0.5 rounded border border-slate-200">
+                      {specsEntries.length} attributes
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
+                    {specsEntries.map(([key, val]) => (
+                      <div key={key} className="p-3 bg-white rounded-lg border border-slate-200 shadow-2xs">
+                        <span className="text-[10px] text-slate-400 font-semibold uppercase block">
+                          {key.replace(/([A-Z])/g, ' $1')}
+                        </span>
+                        <span className="font-bold text-slate-900 block mt-0.5">{String(val)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div className="space-y-4 pt-2">
                 <div>
                   <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-1">Short Description</h4>
                   <p className="text-xs text-slate-700 bg-slate-50 p-3 rounded-lg border border-slate-100 leading-relaxed">
-                    {product.shortDescription || 'No short summary provided.'}
+                    {product.shortDescription || product.description || 'No short summary provided.'}
                   </p>
                 </div>
                 <div>
@@ -497,28 +666,43 @@ export function ProductDetailPage() {
           {/* TAB 2: Specifications */}
           {activeTab === 'specs' && (
             <div className="space-y-4 animate-in fade-in duration-150">
-              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2">
-                Technical Specifications
-              </h4>
+              <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
+                  Technical Specifications Matrix
+                </h4>
+                <Link to={`/seller/products/${product.id}/edit`}>
+                  <Button variant="secondary" size="xs" leftIcon={Edit2}>
+                    Edit Specifications
+                  </Button>
+                </Link>
+              </div>
 
-              {product.specifications && Object.keys(product.specifications).length > 0 ? (
+              {specsEntries.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 text-xs">
-                  {Object.entries(product.specifications).map(([key, val]) => (
-                    <div key={key} className="p-3 bg-slate-50 rounded-lg border border-slate-100">
-                      <span className="text-[10px] text-slate-400 font-semibold uppercase block">
+                  {specsEntries.map(([key, val]) => (
+                    <div key={key} className="p-3.5 bg-slate-50 rounded-xl border border-slate-200">
+                      <span className="text-[10px] text-slate-400 font-bold uppercase block tracking-wider">
                         {key.replace(/([A-Z])/g, ' $1')}
                       </span>
-                      <span className="font-bold text-slate-900 block mt-0.5">{String(val)}</span>
+                      <span className="font-extrabold text-slate-900 block mt-1 text-sm">{String(val)}</span>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-xs text-slate-500 italic p-4 bg-slate-50 rounded-lg">
-                  No technical specifications configured for this material.
-                </p>
+                <div className="p-8 text-center bg-slate-50 rounded-xl border border-dashed border-slate-200 space-y-3">
+                  <p className="text-xs text-slate-500 italic">
+                    No technical specifications configured for this material.
+                  </p>
+                  <Link to={`/seller/products/${product.id}/edit`}>
+                    <Button variant="primary" size="sm" leftIcon={Edit2}>
+                      Add Specifications Now
+                    </Button>
+                  </Link>
+                </div>
               )}
             </div>
           )}
+
 
           {/* TAB 3: Images */}
           {activeTab === 'images' && (
@@ -665,9 +849,9 @@ export function ProductDetailPage() {
           await deleteProduct(product.id);
           navigate('/seller/products');
         }}
-        title="Delete Product"
-        message={`Are you sure you want to permanently delete "${product.name}"? This action cannot be undone.`}
-        confirmText="Delete Product"
+        title={isDeletedByAdmin ? "Remove Product from List" : "Delete Product"}
+        message={isDeletedByAdmin ? `Remove "${product.name || product.title}" from your product list? This will dismiss the deleted listing.` : `Are you sure you want to permanently delete "${product.name}"? This action cannot be undone.`}
+        confirmText={isDeletedByAdmin ? "Remove from My List" : "Delete Product"}
         variant="danger"
       />
 

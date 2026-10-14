@@ -18,56 +18,14 @@ import {
   Trash2,
   Sparkles,
   Check,
+  TrendingDown,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { useCategories, useSubcategories, useBrands } from '../../hooks/useCategories';
 import { useProducts } from '../../hooks/useProducts';
 import { UNITS, GST_RATES } from '../../constants/units';
 import { useUIStore } from '../../store/uiStore';
 import { uploadService } from '../../services/upload.service';
-
-// Curated B2B Construction Material Presets
-const B2B_IMAGE_PRESETS = [
-  {
-    name: 'Tata Tiscon 550D TMT Rebar',
-    category: 'Civil & Structural',
-    url: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=800&auto=format&fit=crop&q=80',
-  },
-  {
-    name: 'UltraTech Super Cement 50kg',
-    category: 'Civil & Structural',
-    url: 'https://images.unsplash.com/photo-1590069261209-f8e9b8642343?w=800&auto=format&fit=crop&q=80',
-  },
-  {
-    name: 'JSW NeoSteel 500D TMT Bar',
-    category: 'Civil & Structural',
-    url: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=800&auto=format&fit=crop&q=80',
-  },
-  {
-    name: 'Astral CPVC Pro High Pressure Pipe',
-    category: 'Plumbing & Water Management',
-    url: 'https://images.unsplash.com/photo-1513694203232-719a280e022f?w=800&auto=format&fit=crop&q=80',
-  },
-  {
-    name: 'Polycab FRLS Industrial Cable 90m',
-    category: 'Electrical & Automation',
-    url: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800&auto=format&fit=crop&q=80',
-  },
-  {
-    name: 'Havells Heavy Duty MCB Switchboard',
-    category: 'Electrical & Automation',
-    url: 'https://images.unsplash.com/photo-1508873696983-2df5293cb32f?w=800&auto=format&fit=crop&q=80',
-  },
-  {
-    name: 'Bosch GSB 500W Professional Impact Drill',
-    category: 'Tools & Machinery',
-    url: 'https://images.unsplash.com/photo-1572981779307-38b8cabb2407?w=800&auto=format&fit=crop&q=80',
-  },
-  {
-    name: 'Asian Paints Apex Ultima WeatherProof 20L',
-    category: 'Paints & Finishes',
-    url: 'https://images.unsplash.com/photo-1562259949-e8e7689d7828?w=800&auto=format&fit=crop&q=80',
-  },
-];
 
 export function AddProductPage() {
   const navigate = useNavigate();
@@ -78,27 +36,36 @@ export function AddProductPage() {
   // Prepopulate from navigation state if available
   const navState = location.state || {};
 
-  // Form State matching Screenshots 3, 4, 5
+  // Form State matching Backend Specification
   const [categoryId, setCategoryId] = useState(navState.defaultCategory || '');
   const [subcategoryId, setSubcategoryId] = useState(navState.defaultSubcategory || '');
+  const [brandId, setBrandId] = useState(navState.defaultBrandId || '');
   const [brandName, setBrandName] = useState(navState.defaultBrand || '');
 
   const [title, setTitle] = useState('');
   const [slug, setSlug] = useState('');
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
-  const [sku, setSku] = useState(() => `SKU-${Math.floor(100000 + Math.random() * 900000)}`);
+  const [sku, setSku] = useState('');
 
   // Pricing & Inventory State
-  const [price, setPrice] = useState('54200.00');
-  const [unit, setUnit] = useState('Unit');
+  const [price, setPrice] = useState('');
+  const [sellingPrice, setSellingPrice] = useState('');
+  const [mrp, setMrp] = useState('');
+  const [unit, setUnit] = useState('');
   const [moq, setMoq] = useState('1');
-  const [stock, setStock] = useState('100');
-  const [hsn, setHsn] = useState('7214');
+  const [stock, setStock] = useState('');
+  const [hsn, setHsn] = useState('');
   const [gstRate, setGstRate] = useState('18% GST');
   const [is24HourDelivery, setIs24HourDelivery] = useState(false);
 
+  // Bulk Pricing Tiers State
+  const [bulkPricingTiers, setBulkPricingTiers] = useState([]);
+
+  // Specifications State (Key-Value map)
+  const [specifications, setSpecifications] = useState([]);
+
   // Imagery State
-  const [activeImageTab, setActiveImageTab] = useState('upload'); // 'upload' | 'presets' | 'url'
+  const [activeImageTab, setActiveImageTab] = useState('upload'); // 'upload' | 'url'
   const [images, setImages] = useState([]);
   const [customImageUrl, setCustomImageUrl] = useState('');
   const [isUploadingImage, setIsUploadingImage] = useState(false);
@@ -126,8 +93,67 @@ export function AddProductPage() {
   }, [subcategories, subcategoryId]);
 
   const selectedBrandObj = useMemo(() => {
-    return brands.find((b) => String(b.id) === String(brandName) || String(b.brandId) === String(brandName) || b.name === brandName);
-  }, [brands, brandName]);
+    return brands.find((b) => String(b.id) === String(brandId) || String(b.brandId) === String(brandId) || b.name === brandName);
+  }, [brands, brandId, brandName]);
+
+  // Sync price with sellingPrice if not edited separately
+  // Sync price with sellingPrice if not edited separately
+  const handlePriceChange = (val) => {
+    setPrice(val);
+    setSellingPrice(val);
+    if (val && !isNaN(parseFloat(val)) && (!mrp || parseFloat(mrp) <= parseFloat(val))) {
+      setMrp(String((parseFloat(val) * 1.15).toFixed(2)));
+    } else if (!val) {
+      setMrp('');
+    }
+  };
+
+  // Bulk Tier Handlers
+  const handleAddTier = () => {
+    const lastTier = bulkPricingTiers[bulkPricingTiers.length - 1];
+    const nextMin = lastTier?.maxQty ? Number(lastTier.maxQty) + 1 : (Number(moq) || 1) + 50;
+    setBulkPricingTiers((prev) => [
+      ...prev,
+      { minQty: nextMin, maxQty: nextMin + 200, price: price || '', discountPercentage: 5.0 },
+    ]);
+  };
+
+  const handleRemoveTier = (idxToRemove) => {
+    setBulkPricingTiers((prev) => prev.filter((_, idx) => idx !== idxToRemove));
+  };
+
+  const handleTierChange = (idx, field, val) => {
+    setBulkPricingTiers((prev) => {
+      const updated = [...prev];
+      updated[idx] = { ...updated[idx], [field]: val };
+      // Auto calculate discount if tier price changes
+      if (field === 'price' && sellingPrice) {
+        const base = parseFloat(sellingPrice) || parseFloat(price) || 1;
+        const tierP = parseFloat(val) || 0;
+        if (tierP > 0 && tierP < base) {
+          updated[idx].discountPercentage = Number((((base - tierP) / base) * 100).toFixed(1));
+        }
+      }
+      return updated;
+    });
+  };
+
+  // Specifications Handlers
+  const handleAddSpec = () => {
+    setSpecifications((prev) => [...prev, { key: '', value: '' }]);
+  };
+
+  const handleRemoveSpec = (idxToRemove) => {
+    setSpecifications((prev) => prev.filter((_, idx) => idx !== idxToRemove));
+  };
+
+  const handleSpecChange = (idx, field, val) => {
+    setSpecifications((prev) => {
+      const updated = [...prev];
+      updated[idx] = { ...updated[idx], [field]: val };
+      return updated;
+    });
+  };
 
   // Auto-generate Slug on Title change
   const handleTitleChange = (val) => {
@@ -185,12 +211,6 @@ export function AddProductPage() {
     }
   };
 
-  const handleSelectPresetImage = (presetUrl) => {
-    if (!images.includes(presetUrl)) {
-      setImages((prev) => [...prev, presetUrl]);
-    }
-  };
-
   const handleRemoveImage = (indexToRemove) => {
     setImages((prev) => prev.filter((_, idx) => idx !== indexToRemove));
   };
@@ -202,7 +222,19 @@ export function AddProductPage() {
     if (!title.trim()) {
       addToast({
         title: 'Title Required',
-        message: 'Please enter a Product Title / Description',
+        message: 'Product title is required by the backend API.',
+        type: 'error',
+      });
+      return;
+    }
+
+    const resolvedBrandId = Number(selectedBrandObj?.brandId || selectedBrandObj?.id || brandId) || null;
+    const resolvedBrandName = selectedBrandObj?.name || selectedBrandObj?.brandName || brandName.trim() || '';
+
+    if (!unit.trim()) {
+      addToast({
+        title: 'Unit Required',
+        message: 'Measurement unit is required (@NotBlank) (e.g. Bags, Ton, Pieces).',
         type: 'error',
       });
       return;
@@ -211,7 +243,7 @@ export function AddProductPage() {
     if (!price || isNaN(Number(price))) {
       addToast({
         title: 'Price Required',
-        message: 'Please enter a valid Price in INR',
+        message: 'Please enter a valid Price in INR.',
         type: 'error',
       });
       return;
@@ -221,57 +253,85 @@ export function AddProductPage() {
 
     const parsedGst = parseInt(gstRate, 10) || 18;
     const finalPrice = parseFloat(price) || 0;
+    const finalSellingPrice = parseFloat(sellingPrice) || finalPrice;
+    const finalMrp = parseFloat(mrp) || Math.round(finalPrice * 1.15);
     const finalMoq = parseInt(moq, 10) || 1;
     const finalStock = parseInt(stock, 10) || 0;
 
     const resolvedCatId = Number(selectedCatObj?.categoryId || selectedCatObj?.id || categoryId) || null;
-    const resolvedCatName = selectedCatObj?.name || selectedCatObj?.title || 'Category';
+    const resolvedCatName = selectedCatObj?.name || selectedCatObj?.title || '';
 
     const resolvedSubcatId = Number(selectedSubcatObj?.subcategoryId || selectedSubcatObj?.id || subcategoryId) || null;
-    const resolvedSubcatName = selectedSubcatObj?.name || selectedSubcatObj?.title || 'Subcategory';
+    const resolvedSubcatName = selectedSubcatObj?.name || selectedSubcatObj?.title || '';
 
-    const resolvedBrandId = Number(selectedBrandObj?.brandId || selectedBrandObj?.id) || null;
-    const resolvedBrandName = selectedBrandObj?.name || selectedBrandObj?.brandName || brandName.trim() || 'Brand';
+    // Format Bulk Pricing Tiers according to BulkPricingTier.java
+    const cleanBulkPricingTiers = bulkPricingTiers
+      .filter((t) => t.minQty && t.price)
+      .map((t) => ({
+        minQty: parseInt(t.minQty, 10),
+        maxQty: t.maxQty !== null && t.maxQty !== undefined && t.maxQty !== '' ? parseInt(t.maxQty, 10) : null,
+        price: parseFloat(t.price),
+        discountPercentage: parseFloat(t.discountPercentage || 0.0),
+      }));
+
+    // Format Specifications Key-Value Map
+    const cleanSpecifications = specifications.reduce((acc, curr) => {
+      if (curr.key && curr.key.trim()) {
+        acc[curr.key.trim()] = curr.value ? curr.value.trim() : '';
+      }
+      return acc;
+    }, {});
 
     const newProductPayload = {
-      brandId: resolvedBrandId,
-      brand: resolvedBrandName,
-      brandName: resolvedBrandName,
+      title: title.trim(),
+      name: title.trim(),
+      sku: sku.trim() || `SKU-${Date.now().toString().slice(-6)}`,
+      description: description.trim(),
       categoryId: resolvedCatId,
       category: resolvedCatName,
       categoryName: resolvedCatName,
       subcategoryId: resolvedSubcatId,
       subcategory: resolvedSubcatName,
       subcategoryName: resolvedSubcatName,
-      title: title.trim(),
-      name: title.trim(),
-      slug: slug.trim() || title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
-      sku: sku.trim() || `SKU-${Date.now().toString().slice(-6)}`,
+      brandId: resolvedBrandId,
+      brand: resolvedBrandName,
+      brandName: resolvedBrandName,
       price: finalPrice,
-      sellingPrice: finalPrice,
-      mrp: Math.round(finalPrice * 1.15),
-      unit: unit || 'PIECE',
+      sellingPrice: finalSellingPrice,
+      mrp: finalMrp,
+      unit: unit.trim(),
       moq: finalMoq,
       stock: finalStock,
       stockQty: finalStock,
-      hsn: hsn.trim() || '7214',
-      hsnCode: hsn.trim() || '7214',
+      hsn: hsn.trim(),
+      hsnCode: hsn.trim(),
       gstRate: parsedGst,
       gst: parsedGst,
       is24HourDelivery: Boolean(is24HourDelivery),
-      images: images.length > 0 ? images : ['https://images.unsplash.com/photo-1583485088034-697b5bc54ccd?w=800&auto=format&fit=crop&q=80'],
-      imageUrl: images[0] || 'https://images.unsplash.com/photo-1583485088034-697b5bc54ccd?w=800&auto=format&fit=crop&q=80',
-      description: description.trim(),
-      status: approvalStatus,
-      approvalStatus: approvalStatus,
-      active: approvalStatus === 'APPROVED',
+      images: images,
+      imageUrl: images[0] || null,
+      bulkPricingTiers: cleanBulkPricingTiers,
+      specifications: cleanSpecifications,
+      status: 'PENDING',
+      approvalStatus: 'PENDING',
+      active: false,
     };
 
     try {
       await createProduct(newProductPayload);
+      addToast({
+        title: 'Product Submitted',
+        message: 'Product listing submitted successfully to the marketplace.',
+        type: 'success',
+      });
       navigate('/seller/products');
     } catch (err) {
       console.error('Error creating product:', err);
+      addToast({
+        title: 'Submission Error',
+        message: err.message || 'Failed to submit product to marketplace.',
+        type: 'error',
+      });
     } finally {
       setIsSubmitting(false);
     }
@@ -374,8 +434,13 @@ export function AddProductPage() {
                 </label>
                 <select
                   required
-                  value={brandName}
-                  onChange={(e) => setBrandName(e.target.value)}
+                  value={brandId}
+                  onChange={(e) => {
+                    const chosenId = e.target.value;
+                    setBrandId(chosenId);
+                    const bObj = brands.find((b) => String(b.id || b.brandId) === String(chosenId));
+                    if (bObj) setBrandName(bObj.name || bObj.brandName || '');
+                  }}
                   disabled={!subcategoryId}
                   className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:border-amber-500 disabled:opacity-50 cursor-pointer shadow-2xs"
                 >
@@ -383,8 +448,8 @@ export function AddProductPage() {
                     {!subcategoryId ? '-- Select Subcategory First --' : (brands.length === 0 ? '-- No Brands Configured --' : '-- Select Brand --')}
                   </option>
                   {brands.map((b) => (
-                    <option key={b.id || b.name} value={b.name}>
-                      {b.name}
+                    <option key={b.id || b.brandId || b.name} value={b.id || b.brandId}>
+                      {b.name || b.brandName}
                     </option>
                   ))}
                 </select>
@@ -455,58 +520,92 @@ export function AddProductPage() {
           </div>
 
           {/* ========================================================================= */}
-          {/* CARD 3: PRICING & INVENTORY (SCREENSHOT 4)                                */}
+          {/* CARD 3: PRICING & INVENTORY                                               */}
           {/* ========================================================================= */}
-          <div className="bg-white rounded-xl border border-slate-200/90 p-5 shadow-2xs space-y-3.5">
+          <div className="bg-white rounded-xl border border-slate-200/90 p-5 shadow-2xs space-y-4">
             <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-amber-700">
               <IndianRupee className="w-4 h-4 text-amber-500" />
-              <span>Pricing & Inventory</span>
+              <span>Pricing & Inventory Details</span>
             </div>
 
-            {/* Row 1: Price, Unit, MOQ */}
+            {/* Row 1: Base Price, Selling Price, MRP */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                  Price in INR (₹) <span className="text-rose-500">*</span>
+                  Base Price in INR (₹) <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="number"
                   step="0.01"
                   required
-                  placeholder="54200.00"
+                  placeholder="0.00"
                   value={price}
-                  onChange={(e) => setPrice(e.target.value)}
+                  onChange={(e) => handlePriceChange(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:border-amber-500 shadow-2xs"
                 />
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                  Unit <span className="text-rose-500">*</span>
+                  Selling Price in INR (₹)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={sellingPrice}
+                  onChange={(e) => setSellingPrice(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:border-amber-500 shadow-2xs"
+                />
+                <p className="text-[10.5px] text-slate-400 mt-1">Default buyer price (overrides Base Price)</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  MRP in INR (₹)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={mrp}
+                  onChange={(e) => setMrp(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs"
+                />
+                <p className="text-[10.5px] text-slate-400 mt-1">Maximum Retail Price</p>
+              </div>
+            </div>
+
+            {/* Row 2: Unit, MOQ, Available Stock */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  Unit of Measure <span className="text-rose-500">*</span>
                 </label>
                 <select
                   required
                   value={unit}
                   onChange={(e) => setUnit(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-2xs"
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-2xs font-medium"
                 >
-                  <option value="Unit">Unit</option>
-                  <option value="MT">MT (Metric Ton)</option>
-                  <option value="Bag">Bag (50kg)</option>
-                  <option value="Piece">Piece / SKU</option>
-                  <option value="Ton">Ton</option>
-                  <option value="Kg">Kg</option>
-                  <option value="Bundle">Bundle</option>
-                  <option value="Sq.Ft">Sq.Ft</option>
+                  <option value="">-- Select Unit of Measure --</option>
+                  <option value="Bags">Bags (e.g. Cement, Putty)</option>
+                  <option value="Ton">Ton / MT (e.g. TMT Steel)</option>
+                  <option value="Pieces">Pieces / SKU</option>
+                  <option value="Meters">Meters (e.g. Cables, Pipes)</option>
+                  <option value="Kg">Kilograms (Kg)</option>
                   <option value="Box">Box / Carton</option>
-                  <option value="Meter">Meter (Rmt)</option>
-                  <option value="Litre">Litre (L)</option>
+                  <option value="Sq.Ft">Square Feet (Sq.Ft)</option>
+                  <option value="Sq.M">Square Meters (Sq.M)</option>
+                  <option value="Litre">Litres (L)</option>
+                  <option value="Bundle">Bundle</option>
+                  <option value="Truckload">Full Truckload (FTL)</option>
                 </select>
               </div>
 
               <div>
                 <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                  Minimum Order Quantity
+                  Minimum Order Quantity (MOQ)
                 </label>
                 <input
                   type="number"
@@ -517,30 +616,30 @@ export function AddProductPage() {
                   className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs"
                 />
               </div>
-            </div>
 
-            {/* Row 2: Available Stock, HSN Code, GST Rate */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-bold text-slate-800 mb-1.5">
                   Available Stock Inventory
                 </label>
                 <input
                   type="number"
-                  placeholder="100"
+                  placeholder="0"
                   value={stock}
                   onChange={(e) => setStock(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs"
                 />
               </div>
+            </div>
 
+            {/* Row 3: HSN Code, GST Rate, 24-Hour Delivery */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-end">
               <div>
                 <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                  HSN Code
+                  HSN / SAC Code
                 </label>
                 <input
                   type="text"
-                  placeholder="7214"
+                  placeholder="e.g. 7214"
                   value={hsn}
                   onChange={(e) => setHsn(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs"
@@ -549,37 +648,208 @@ export function AddProductPage() {
 
               <div>
                 <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                  GST Rate
+                  GST Applicable Rate
                 </label>
                 <select
                   value={gstRate}
                   onChange={(e) => setGstRate(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-2xs"
                 >
-                  <option value="18% GST">18% GST</option>
-                  <option value="5% GST">5% GST</option>
-                  <option value="12% GST">12% GST</option>
-                  <option value="28% GST">28% GST</option>
-                  <option value="0% GST">0% GST</option>
+                  <option value="18% GST">18% GST (Standard)</option>
+                  <option value="28% GST">28% GST (Cement / Luxury)</option>
+                  <option value="12% GST">12% GST (Pipes / Hardware)</option>
+                  <option value="5% GST">5% GST (Aggregates / Sand)</option>
+                  <option value="0% GST">0% GST (Exempt)</option>
                 </select>
               </div>
+
+              <div className="pb-1">
+                <label className="flex items-center gap-2.5 p-2.5 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-amber-50/30 transition-colors cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={is24HourDelivery}
+                    onChange={(e) => setIs24HourDelivery(e.target.checked)}
+                    className="w-4 h-4 rounded text-amber-500 focus:ring-amber-500 accent-amber-500 cursor-pointer shrink-0"
+                  />
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
+                    <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0" />
+                    <span>24-Hour Express Delivery</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {/* ========================================================================= */}
+          {/* CARD 3B: WHOLESALE BULK PRICING TIERS                                     */}
+          {/* ========================================================================= */}
+          <div className="bg-white rounded-xl border border-slate-200/90 p-5 shadow-2xs space-y-3.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-amber-700">
+                <TrendingDown className="w-4 h-4 text-amber-500" />
+                <span>Wholesale Quantity Discount Tiers (Bulk Pricing)</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddTier}
+                className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Tier</span>
+              </button>
             </div>
 
-            {/* Row 3: 24-Hour Express Logistics Delivery */}
-            <div className="pt-1">
-              <label className="flex items-center gap-2.5 p-3 rounded-lg border border-slate-200 bg-slate-50/70 hover:bg-amber-50/30 transition-colors cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={is24HourDelivery}
-                  onChange={(e) => setIs24HourDelivery(e.target.checked)}
-                  className="w-4 h-4 rounded text-amber-500 focus:ring-amber-500 accent-amber-500 cursor-pointer shrink-0"
-                />
-                <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-                  <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0" />
-                  <span>Enable 24-Hour Express Logistics Delivery for this product</span>
+            <p className="text-[11.5px] text-slate-500">
+              Provide volume-based discounted pricing for bulk B2B procurement contractors & distributors.
+            </p>
+
+            {bulkPricingTiers.length === 0 ? (
+              <div className="border border-dashed border-slate-200 rounded-xl p-4 text-center text-xs text-slate-400">
+                No bulk pricing tiers added yet. Click &quot;Add Tier&quot; to offer volume discounts.
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                <div className="grid grid-cols-12 gap-2 text-[11px] font-extrabold text-slate-500 px-1 uppercase tracking-wider">
+                  <div className="col-span-3">Min Qty</div>
+                  <div className="col-span-3">Max Qty</div>
+                  <div className="col-span-3">Tier Price (₹)</div>
+                  <div className="col-span-2">Discount %</div>
+                  <div className="col-span-1 text-center">Action</div>
                 </div>
-              </label>
+
+                {bulkPricingTiers.map((tier, idx) => (
+                  <div
+                    key={idx}
+                    className="grid grid-cols-12 gap-2 items-center bg-slate-50 p-2.5 rounded-lg border border-slate-200"
+                  >
+                    <div className="col-span-3">
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="50"
+                        value={tier.minQty}
+                        onChange={(e) => handleTierChange(idx, 'minQty', e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded text-xs font-mono text-slate-900 focus:outline-hidden focus:ring-1 focus:ring-amber-500"
+                      />
+                    </div>
+                    <div className="col-span-3">
+                      <input
+                        type="number"
+                        min="1"
+                        placeholder="Optional max (e.g. 199)"
+                        value={tier.maxQty || ''}
+                        onChange={(e) => handleTierChange(idx, 'maxQty', e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded text-xs font-mono text-slate-900 focus:outline-hidden focus:ring-1 focus:ring-amber-500"
+                      />
+                    </div>
+                    <div className="col-span-3">
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="380.00"
+                        value={tier.price}
+                        onChange={(e) => handleTierChange(idx, 'price', e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded text-xs font-mono font-bold text-slate-900 focus:outline-hidden focus:ring-1 focus:ring-amber-500"
+                      />
+                    </div>
+                    <div className="col-span-2">
+                      <input
+                        type="number"
+                        step="0.1"
+                        placeholder="0.0"
+                        value={tier.discountPercentage}
+                        onChange={(e) => handleTierChange(idx, 'discountPercentage', e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded text-xs font-mono text-slate-900 focus:outline-hidden focus:ring-1 focus:ring-amber-500"
+                      />
+                    </div>
+                    <div className="col-span-1 text-center">
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveTier(idx)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                        title="Remove Tier"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ========================================================================= */}
+          {/* CARD 3C: TECHNICAL SPECIFICATIONS (KEY-VALUE PAIRS)                       */}
+          {/* ========================================================================= */}
+          <div className="bg-white rounded-xl border border-slate-200/90 p-5 shadow-2xs space-y-3.5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-amber-700">
+                <SlidersHorizontal className="w-4 h-4 text-amber-500" />
+                <span>Technical Specifications (Key-Value)</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddSpec}
+                className="px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-lg text-xs font-bold transition-all flex items-center gap-1 cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Specification</span>
+              </button>
             </div>
+
+            <p className="text-[11.5px] text-slate-500">
+              Provide engineering, statutory compliance, grade, and packaging specs for buyers.
+            </p>
+
+            {specifications.length === 0 ? (
+              <div className="border border-dashed border-slate-200 rounded-xl p-4 text-center text-xs text-slate-400">
+                No technical specifications added. Click &quot;Add Specification&quot; to configure properties.
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                <div className="grid grid-cols-12 gap-2 text-[11px] font-extrabold text-slate-500 px-1 uppercase tracking-wider">
+                  <div className="col-span-5">Specification Key</div>
+                  <div className="col-span-6">Specification Value</div>
+                  <div className="col-span-1 text-center">Action</div>
+                </div>
+
+                {specifications.map((spec, idx) => (
+                  <div
+                    key={idx}
+                    className="grid grid-cols-12 gap-2 items-center bg-slate-50 p-2.5 rounded-lg border border-slate-200"
+                  >
+                    <div className="col-span-5">
+                      <input
+                        type="text"
+                        placeholder="e.g. Grade, Packaging, Standard"
+                        value={spec.key}
+                        onChange={(e) => handleSpecChange(idx, 'key', e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded text-xs font-medium text-slate-900 focus:outline-hidden focus:ring-1 focus:ring-amber-500"
+                      />
+                    </div>
+                    <div className="col-span-6">
+                      <input
+                        type="text"
+                        placeholder="e.g. PPC Grade, 50 kg HDPE Bag"
+                        value={spec.value}
+                        onChange={(e) => handleSpecChange(idx, 'value', e.target.value)}
+                        className="w-full px-2.5 py-1.5 bg-white border border-slate-200 rounded text-xs text-slate-900 focus:outline-hidden focus:ring-1 focus:ring-amber-500"
+                      />
+                    </div>
+                    <div className="col-span-1 text-center">
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveSpec(idx)}
+                        className="p-1.5 text-slate-400 hover:text-rose-600 transition-colors cursor-pointer"
+                        title="Remove Specification"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           {/* ========================================================================= */}
@@ -591,7 +861,7 @@ export function AddProductPage() {
               <span>Product Imagery</span>
             </div>
 
-            {/* Image Source Tabs: Upload File, B2B Presets, Cloud URL */}
+            {/* Image Source Tabs: Upload File, Cloud URL */}
             <div className="inline-flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
               <button
                 type="button"
@@ -604,19 +874,6 @@ export function AddProductPage() {
               >
                 <Upload className="w-3.5 h-3.5" />
                 <span>Upload File</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveImageTab('presets')}
-                className={`px-4 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                  activeImageTab === 'presets'
-                    ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Layers className="w-3.5 h-3.5" />
-                <span>B2B Presets</span>
               </button>
 
               <button
@@ -661,51 +918,6 @@ export function AddProductPage() {
                 <p className="text-xs text-slate-400 mt-1">
                   Any format & resolution supported (JPG, PNG, WebP, GIF, SVG) — No size limit
                 </p>
-              </div>
-            )}
-
-            {/* TAB 2: B2B PRESETS */}
-            {activeImageTab === 'presets' && (
-              <div className="space-y-2">
-                <p className="text-xs text-slate-500 font-medium">
-                  Select official high-resolution B2B catalog imagery:
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-h-64 overflow-y-auto p-1 custom-scrollbar">
-                  {B2B_IMAGE_PRESETS.map((preset) => {
-                    const isAdded = images.includes(preset.url);
-                    return (
-                      <button
-                        type="button"
-                        key={preset.name}
-                        onClick={() => handleSelectPresetImage(preset.url)}
-                        className={`p-2 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                          isAdded
-                            ? 'border-amber-500 bg-amber-50/50 ring-2 ring-amber-500/20 shadow-xs'
-                            : 'border-slate-200 hover:border-slate-300 bg-white'
-                        }`}
-                      >
-                        <div className="w-full h-24 rounded-lg overflow-hidden bg-slate-100 mb-2 relative">
-                          <img
-                            src={preset.url}
-                            alt={preset.name}
-                            className="w-full h-full object-cover"
-                          />
-                          {isAdded && (
-                            <span className="absolute top-1.5 right-1.5 bg-amber-500 text-slate-950 p-1 rounded-md shadow-xs">
-                              <Check className="w-3 h-3 stroke-[3]" />
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-[11px] font-bold text-slate-800 line-clamp-2 leading-snug">
-                          {preset.name}
-                        </span>
-                        <span className="text-[10px] text-slate-400 mt-0.5 block truncate">
-                          {preset.category}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
               </div>
             )}
 
@@ -794,15 +1006,15 @@ export function AddProductPage() {
               <span>Approval & Visibility Status</span>
             </div>
 
-            <select
-              value={approvalStatus}
-              onChange={(e) => setApprovalStatus(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 font-semibold focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-2xs"
-            >
-              <option value="PENDING">⏳ Pending Approval Review</option>
-              <option value="APPROVED">✅ Approved & Live in Marketplace</option>
-              <option value="INACTIVE">❌ Draft / Inactive</option>
-            </select>
+            <div className="bg-amber-50/80 border border-amber-200/90 rounded-lg p-3 flex items-center justify-between">
+              <span className="text-xs font-bold text-amber-900">Initial Listing Status:</span>
+              <span className="px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300 shadow-2xs">
+                ⏳ PENDING ADMIN APPROVAL
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              New listings are reviewed by the HinchMart Catalog Compliance Team. Once an Admin reviews and approves this product, its status will automatically update to <span className="font-bold text-emerald-700">APPROVED</span>. If rejected, the rejection reason will be displayed.
+            </p>
           </div>
 
           {/* ========================================================================= */}

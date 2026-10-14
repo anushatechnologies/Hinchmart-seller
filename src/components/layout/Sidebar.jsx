@@ -27,6 +27,7 @@ import {
   Settings,
   Layers,
   Store,
+  LifeBuoy,
 } from 'lucide-react';
 import { BrandLogo } from '../common/BrandLogo';
 import { NAV_GROUPS } from '../../constants/navigation';
@@ -58,6 +59,7 @@ const ICON_MAP = {
   Settings,
   Layers,
   Store,
+  LifeBuoy,
 };
 
 export function Sidebar() {

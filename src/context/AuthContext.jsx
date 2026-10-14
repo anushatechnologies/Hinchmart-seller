@@ -29,13 +29,13 @@ export function AuthProvider({ children }) {
             // Fetch verified backend user role & sellerId
             const backendUser = await authService.fetchCurrentUserDetails();
             const activeUser = {
-              id: backendUser.sellerId || backendUser.userId || '9',
-              sellerId: backendUser.sellerId || '9',
-              name: backendUser.name || currentFbUser.displayName || 'Authorized Seller',
+              id: backendUser.sellerId || backendUser.userId || currentFbUser.uid,
+              sellerId: backendUser.sellerId || backendUser.userId || currentFbUser.uid,
+              name: backendUser.name || currentFbUser.displayName || 'Seller',
               email: currentFbUser.email,
               phone: backendUser.phone || '',
               role: backendUser.role || 'SELLER_ADMIN',
-              companyName: backendUser.companyName || `${backendUser.name || 'Seller'} Enterprise`,
+              companyName: backendUser.companyName || (backendUser.name ? `${backendUser.name} Enterprise` : 'Seller Enterprise'),
               claims: backendUser.claims || {},
             };
 

@@ -20,56 +20,14 @@ import { useCategories, useSubcategories, useBrands } from '../../hooks/useCateg
 import { useProducts } from '../../hooks/useProducts';
 import { useUIStore } from '../../store/uiStore';
 import { uploadService } from '../../services/upload.service';
-
-// Curated B2B Construction Material Presets
-const B2B_IMAGE_PRESETS = [
-  {
-    name: 'Tata Tiscon 550D TMT Rebar',
-    category: 'Civil & Structural',
-    url: 'https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=800&auto=format&fit=crop&q=80',
-  },
-  {
-    name: 'UltraTech Super Cement 50kg',
-    category: 'Civil & Structural',
-    url: 'https://images.unsplash.com/photo-1590069261209-f8e9b8642343?w=800&auto=format&fit=crop&q=80',
-  },
-  {
-    name: 'JSW NeoSteel 500D TMT Bar',
-    category: 'Civil & Structural',
-    url: 'https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?w=800&auto=format&fit=crop&q=80',
-  },
-  {
-    name: 'Astral CPVC Pro High Pressure Pipe',
-    category: 'Plumbing & Water Management',
-    url: 'https://images.unsplash.com/photo-1513694203232-719a280e022f?w=800&auto=format&fit=crop&q=80',
-  },
-  {
-    name: 'Polycab FRLS Industrial Cable 90m',
-    category: 'Electrical & Automation',
-    url: 'https://images.unsplash.com/photo-1558494949-ef010cbdcc31?w=800&auto=format&fit=crop&q=80',
-  },
-  {
-    name: 'Havells Heavy Duty MCB Switchboard',
-    category: 'Electrical & Automation',
-    url: 'https://images.unsplash.com/photo-1508873696983-2df5293cb32f?w=800&auto=format&fit=crop&q=80',
-  },
-  {
-    name: 'Bosch GSB 500W Professional Impact Drill',
-    category: 'Tools & Machinery',
-    url: 'https://images.unsplash.com/photo-1572981779307-38b8cabb2407?w=800&auto=format&fit=crop&q=80',
-  },
-  {
-    name: 'Asian Paints Apex Ultima WeatherProof 20L',
-    category: 'Paints & Finishes',
-    url: 'https://images.unsplash.com/photo-1562259949-e8e7689d7828?w=800&auto=format&fit=crop&q=80',
-  },
-];
+import { DynamicSpecRenderer } from './DynamicSpecRenderer';
+import { Sliders } from 'lucide-react';
 
 export function AddProductModal({ isOpen, onClose, initialData = {} }) {
   const addToast = useUIStore((state) => state.addToast);
   const { createProduct } = useProducts();
 
-  // Form State matching Screenshots 3, 4, 5
+  // Form State
   const [categoryId, setCategoryId] = useState(initialData.categoryId || '');
   const [subcategoryId, setSubcategoryId] = useState(initialData.subcategoryId || '');
   const [brandName, setBrandName] = useState(initialData.brandName || '');
@@ -77,19 +35,19 @@ export function AddProductModal({ isOpen, onClose, initialData = {} }) {
   const [title, setTitle] = useState(initialData.title || '');
   const [slug, setSlug] = useState(initialData.slug || '');
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
-  const [sku, setSku] = useState(() => initialData.sku || `SKU-${Math.floor(100000 + Math.random() * 900000)}`);
+  const [sku, setSku] = useState(() => initialData.sku || '');
 
   // Pricing & Inventory State
-  const [price, setPrice] = useState(initialData.price || '54200.00');
-  const [unit, setUnit] = useState(initialData.unit || 'Unit');
+  const [price, setPrice] = useState(initialData.price || '');
+  const [unit, setUnit] = useState(initialData.unit || '');
   const [moq, setMoq] = useState(initialData.moq || '1');
-  const [stock, setStock] = useState(initialData.stock || '100');
-  const [hsn, setHsn] = useState(initialData.hsn || '7214');
+  const [stock, setStock] = useState(initialData.stock || '');
+  const [hsn, setHsn] = useState(initialData.hsn || '');
   const [gstRate, setGstRate] = useState(initialData.gstRate || '18% GST');
   const [is24HourDelivery, setIs24HourDelivery] = useState(Boolean(initialData.is24HourDelivery));
 
   // Imagery State
-  const [activeImageTab, setActiveImageTab] = useState('upload'); // 'upload' | 'presets' | 'url'
+  const [activeImageTab, setActiveImageTab] = useState('upload'); // 'upload' | 'url'
   const [images, setImages] = useState(initialData.images || []);
   const [customImageUrl, setCustomImageUrl] = useState('');
 
@@ -97,6 +55,19 @@ export function AddProductModal({ isOpen, onClose, initialData = {} }) {
   const [description, setDescription] = useState(initialData.description || '');
   const [approvalStatus, setApprovalStatus] = useState(initialData.approvalStatus || 'PENDING');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [specifications, setSpecifications] = useState(initialData.specifications || {});
+
+  const handleSpecChange = (field, value) => {
+    setSpecifications((prev) => {
+      const next = { ...(prev || {}) };
+      if (value === undefined || value === null) {
+        delete next[field];
+      } else {
+        next[field] = value;
+      }
+      return next;
+    });
+  };
 
   // Categories query
   const { categories = [] } = useCategories();
@@ -124,6 +95,7 @@ export function AddProductModal({ isOpen, onClose, initialData = {} }) {
       if (initialData.categoryId) setCategoryId(initialData.categoryId);
       if (initialData.subcategoryId) setSubcategoryId(initialData.subcategoryId);
       if (initialData.brandName) setBrandName(initialData.brandName);
+      if (initialData.specifications) setSpecifications(initialData.specifications);
     }
   }, [isOpen, initialData]);
 
@@ -171,12 +143,6 @@ export function AddProductModal({ isOpen, onClose, initialData = {} }) {
     }
   };
 
-  const handleSelectPresetImage = (presetUrl) => {
-    if (!images.includes(presetUrl)) {
-      setImages((prev) => [...prev, presetUrl]);
-    }
-  };
-
   const handleRemoveImage = (indexToRemove) => {
     setImages((prev) => prev.filter((_, idx) => idx !== indexToRemove));
   };
@@ -211,13 +177,13 @@ export function AddProductModal({ isOpen, onClose, initialData = {} }) {
     const finalStock = parseInt(stock, 10) || 0;
 
     const resolvedCatId = Number(selectedCatObj?.categoryId || selectedCatObj?.id || categoryId) || null;
-    const resolvedCatName = selectedCatObj?.name || selectedCatObj?.title || 'Category';
+    const resolvedCatName = selectedCatObj?.name || selectedCatObj?.title || '';
 
     const resolvedSubcatId = Number(selectedSubcatObj?.subcategoryId || selectedSubcatObj?.id || subcategoryId) || null;
-    const resolvedSubcatName = selectedSubcatObj?.name || selectedSubcatObj?.title || 'Subcategory';
+    const resolvedSubcatName = selectedSubcatObj?.name || selectedSubcatObj?.title || '';
 
     const resolvedBrandId = Number(selectedBrandObj?.brandId || selectedBrandObj?.id) || null;
-    const resolvedBrandName = selectedBrandObj?.name || selectedBrandObj?.brandName || brandName.trim() || 'Brand';
+    const resolvedBrandName = selectedBrandObj?.name || selectedBrandObj?.brandName || brandName.trim() || '';
 
     const newProductPayload = {
       brandId: resolvedBrandId,
@@ -235,22 +201,24 @@ export function AddProductModal({ isOpen, onClose, initialData = {} }) {
       sku: sku.trim() || `SKU-${Date.now().toString().slice(-6)}`,
       price: finalPrice,
       sellingPrice: finalPrice,
-      mrp: Math.round(finalPrice * 1.15),
+      mrp: finalPrice ? Math.round(finalPrice * 1.15) : 0,
       unit: unit || 'PIECE',
       moq: finalMoq,
       stock: finalStock,
       stockQty: finalStock,
-      hsn: hsn.trim() || '7214',
-      hsnCode: hsn.trim() || '7214',
+      hsn: hsn.trim(),
+      hsnCode: hsn.trim(),
       gstRate: parsedGst,
       gst: parsedGst,
       is24HourDelivery: Boolean(is24HourDelivery),
-      images: images.length > 0 ? images : ['https://images.unsplash.com/photo-1583485088034-697b5bc54ccd?w=800&auto=format&fit=crop&q=80'],
-      imageUrl: images[0] || 'https://images.unsplash.com/photo-1583485088034-697b5bc54ccd?w=800&auto=format&fit=crop&q=80',
+      images: images,
+      imageUrl: images[0] || null,
       description: description.trim(),
-      status: approvalStatus,
-      approvalStatus: approvalStatus,
-      active: approvalStatus === 'APPROVED',
+      specifications: specifications || {},
+      specs: specifications || {},
+      status: 'PENDING',
+      approvalStatus: 'PENDING',
+      active: false,
     };
 
     try {
@@ -460,7 +428,7 @@ export function AddProductModal({ isOpen, onClose, initialData = {} }) {
                   type="number"
                   step="0.01"
                   required
-                  placeholder="54200.00"
+                  placeholder="0.00"
                   value={price}
                   onChange={(e) => setPrice(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:border-amber-500 shadow-2xs"
@@ -477,6 +445,7 @@ export function AddProductModal({ isOpen, onClose, initialData = {} }) {
                   onChange={(e) => setUnit(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-2xs"
                 >
+                  <option value="">-- Select Unit --</option>
                   <option value="Unit">Unit</option>
                   <option value="MT">MT (Metric Ton)</option>
                   <option value="Bag">Bag (50kg)</option>
@@ -514,7 +483,7 @@ export function AddProductModal({ isOpen, onClose, initialData = {} }) {
                 </label>
                 <input
                   type="number"
-                  placeholder="100"
+                  placeholder="0"
                   value={stock}
                   onChange={(e) => setStock(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs"
@@ -527,7 +496,7 @@ export function AddProductModal({ isOpen, onClose, initialData = {} }) {
                 </label>
                 <input
                   type="text"
-                  placeholder="7214"
+                  placeholder="e.g. 7214"
                   value={hsn}
                   onChange={(e) => setHsn(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs"
@@ -578,7 +547,7 @@ export function AddProductModal({ isOpen, onClose, initialData = {} }) {
               <span>Product Imagery</span>
             </div>
 
-            {/* Image Source Tabs: Upload File, B2B Presets, Cloud URL */}
+            {/* Image Source Tabs: Upload File, Cloud URL */}
             <div className="inline-flex items-center bg-slate-100 p-1 rounded-xl border border-slate-200 text-xs">
               <button
                 type="button"
@@ -591,19 +560,6 @@ export function AddProductModal({ isOpen, onClose, initialData = {} }) {
               >
                 <Upload className="w-3.5 h-3.5" />
                 <span>Upload File</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setActiveImageTab('presets')}
-                className={`px-4 py-1.5 rounded-lg font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                  activeImageTab === 'presets'
-                    ? 'bg-white text-slate-900 shadow-xs border border-slate-200/80'
-                    : 'text-slate-600 hover:text-slate-900'
-                }`}
-              >
-                <Layers className="w-3.5 h-3.5" />
-                <span>B2B Presets</span>
               </button>
 
               <button
@@ -648,48 +604,6 @@ export function AddProductModal({ isOpen, onClose, initialData = {} }) {
                 <p className="text-xs text-slate-400 mt-1">
                   Any format & resolution supported (JPG, PNG, WebP, GIF, SVG) — No size limit
                 </p>
-              </div>
-            )}
-
-            {/* TAB 2: B2B PRESETS */}
-            {activeImageTab === 'presets' && (
-              <div className="space-y-2">
-                <p className="text-xs text-slate-500 font-medium">
-                  Select official high-resolution B2B catalog imagery:
-                </p>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 max-h-56 overflow-y-auto p-1 custom-scrollbar">
-                  {B2B_IMAGE_PRESETS.map((preset) => {
-                    const isAdded = images.includes(preset.url);
-                    return (
-                      <button
-                        type="button"
-                        key={preset.name}
-                        onClick={() => handleSelectPresetImage(preset.url)}
-                        className={`p-2 rounded-xl border text-left transition-all cursor-pointer flex flex-col justify-between ${
-                          isAdded
-                            ? 'border-amber-500 bg-amber-50/50 ring-2 ring-amber-500/20 shadow-xs'
-                            : 'border-slate-200 hover:border-slate-300 bg-white'
-                        }`}
-                      >
-                        <div className="w-full h-20 rounded-lg overflow-hidden bg-slate-100 mb-1.5 relative">
-                          <img
-                            src={preset.url}
-                            alt={preset.name}
-                            className="w-full h-full object-cover"
-                          />
-                          {isAdded && (
-                            <span className="absolute top-1 right-1 bg-amber-500 text-slate-950 p-0.5 rounded shadow-xs">
-                              <Check className="w-3 h-3 stroke-[3]" />
-                            </span>
-                          )}
-                        </div>
-                        <span className="text-[10px] font-bold text-slate-800 line-clamp-2 leading-tight">
-                          {preset.name}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
               </div>
             )}
 
@@ -752,6 +666,22 @@ export function AddProductModal({ isOpen, onClose, initialData = {} }) {
           </div>
 
           {/* ========================================================================= */}
+          {/* CARD 4.5: TECHNICAL SPECIFICATIONS                                        */}
+          {/* ========================================================================= */}
+          <div className="bg-white rounded-xl border border-slate-200/90 p-5 shadow-2xs space-y-3.5">
+            <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-amber-700">
+              <Sliders className="w-4 h-4 text-amber-500" />
+              <span>Technical Specifications & Properties</span>
+            </div>
+
+            <DynamicSpecRenderer
+              categoryId={categoryId}
+              values={specifications}
+              onChange={handleSpecChange}
+            />
+          </div>
+
+          {/* ========================================================================= */}
           {/* CARD 5: TECHNICAL DESCRIPTION (SCREENSHOT 5)                              */}
           {/* ========================================================================= */}
           <div className="bg-white rounded-xl border border-slate-200/90 p-5 shadow-2xs space-y-3.5">
@@ -778,15 +708,15 @@ export function AddProductModal({ isOpen, onClose, initialData = {} }) {
               <span>Approval & Visibility Status</span>
             </div>
 
-            <select
-              value={approvalStatus}
-              onChange={(e) => setApprovalStatus(e.target.value)}
-              className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 font-semibold focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-2xs"
-            >
-              <option value="PENDING">⏳ Pending Approval Review</option>
-              <option value="APPROVED">✅ Approved & Live in Marketplace</option>
-              <option value="INACTIVE">❌ Draft / Inactive</option>
-            </select>
+            <div className="bg-amber-50/80 border border-amber-200/90 rounded-lg p-3 flex items-center justify-between">
+              <span className="text-xs font-bold text-amber-900">Initial Listing Status:</span>
+              <span className="px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-amber-100 text-amber-800 border border-amber-300 shadow-2xs">
+                ⏳ PENDING ADMIN APPROVAL
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              New listings are reviewed by the HinchMart Catalog Compliance Team. Once an Admin reviews and approves this product, its status will automatically update to <span className="font-bold text-emerald-700">APPROVED</span>. If rejected, the rejection reason will be displayed.
+            </p>
           </div>
 
           {/* ========================================================================= */}

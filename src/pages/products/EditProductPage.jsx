@@ -9,6 +9,9 @@ import {
   Warehouse,
   Image as ImageIcon,
   CheckCircle2,
+  AlertTriangle,
+  Send,
+  XCircle,
 } from 'lucide-react';
 import { useProduct } from '../../hooks/useProducts';
 import { useCategories, useSubcategories, useBrands } from '../../hooks/useCategories';
@@ -35,10 +38,18 @@ export function EditProductPage() {
 
   useEffect(() => {
     if (product) {
+      let initialSpecs = product.specifications || product.specs || {};
+      if (typeof initialSpecs === 'string') {
+        try {
+          initialSpecs = JSON.parse(initialSpecs);
+        } catch (_) {
+          initialSpecs = {};
+        }
+      }
       setFormData({
         ...product,
-        specifications: product.specifications || {},
-        pricingTiers: product.pricingTiers || [],
+        specifications: typeof initialSpecs === 'object' && initialSpecs !== null ? initialSpecs : {},
+        pricingTiers: product.pricingTiers || product.bulkPricingTiers || [],
       });
     }
   }, [product]);
@@ -87,23 +98,53 @@ export function EditProductPage() {
   };
 
   const handleSpecChange = (field, value) => {
-    setFormData((prev) => ({
-      ...prev,
-      specifications: {
-        ...prev.specifications,
-        [field]: value,
-      },
-    }));
+    setFormData((prev) => {
+      const nextSpecs = { ...(prev.specifications || {}) };
+      if (value === undefined || value === null) {
+        delete nextSpecs[field];
+      } else {
+        nextSpecs[field] = value;
+      }
+      return {
+        ...prev,
+        specifications: nextSpecs,
+      };
+    });
   };
+
+  const isRejected =
+    product?.status === 'REJECTED' ||
+    product?.approvalStatus === 'REJECTED' ||
+    formData?.status === 'REJECTED' ||
+    formData?.approvalStatus === 'REJECTED';
+
+  const isDeletedByAdmin =
+    !isRejected && (
+      formData?.status === 'DELETED_BY_ADMIN' ||
+      formData?.status === 'DELETED' ||
+      formData?.deletedByAdmin
+    );
 
   const handleSave = async (e) => {
     e?.preventDefault?.();
     try {
-      await updateProduct(formData);
-      navigate(`/seller/products/${id}`);
+      const updates = {
+        ...formData,
+        // When seller re-submits a rejected product, it resets to PENDING for Admin review!
+        status: isRejected ? 'PENDING' : (formData.status || 'PENDING'),
+        approvalStatus: isRejected ? 'PENDING' : (formData.approvalStatus || 'PENDING'),
+        active: false,
+        deletedByAdmin: false,
+        rejectionReason: isRejected ? null : formData.rejectionReason,
+        reSubmittedAt: isRejected ? new Date().toISOString() : formData.reSubmittedAt,
+        updatedAt: new Date().toISOString(),
+      };
+
+      await updateProduct(updates);
+      navigate('/seller/products');
     } catch (err) {
       console.warn('Product save notice:', err);
-      navigate(`/seller/products/${id}`);
+      navigate('/seller/products');
     }
   };
 
@@ -131,11 +172,46 @@ export function EditProductPage() {
           size="md"
           onClick={handleSave}
           isLoading={isUpdating}
-          leftIcon={Save}
+          leftIcon={isRejected ? Send : Save}
+          className={isRejected ? "bg-amber-500 hover:bg-amber-600 text-slate-950 font-black shadow-md" : ""}
         >
-          Save Changes
+          {isRejected ? 'Re-submit for Approval' : 'Save Changes'}
         </Button>
       </div>
+
+      {isRejected && (
+        <div className="p-4 rounded-xl bg-amber-50 border-2 border-amber-300 text-amber-950 flex items-start gap-3 shadow-xs">
+          <XCircle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded text-[10px] font-black bg-rose-600 text-white uppercase tracking-wider">
+                Rejected by Admin
+              </span>
+              <h4 className="font-extrabold text-sm text-slate-900">
+                Action Required: Update Details & Re-submit
+              </h4>
+            </div>
+            <p className="text-xs text-rose-950 font-semibold mt-1">
+              Feedback from Compliance Team: <span className="font-normal text-rose-800">{product?.rejectionReason || formData?.rejectionReason || 'Please review your technical specifications, pricing, and product images.'}</span>
+            </p>
+            <p className="text-[11px] text-amber-800 mt-1">
+              Correct the fields below and click <strong>"Re-submit for Approval"</strong>. This listing will return to <strong>PENDING</strong> review on the Admin compliance dashboard.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {isDeletedByAdmin && (
+        <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 flex items-start gap-3 shadow-xs">
+          <AlertTriangle className="w-5 h-5 text-rose-600 shrink-0 mt-0.5" />
+          <div>
+            <h4 className="font-bold text-sm text-rose-950">This Product Was Deleted by Admin</h4>
+            <p className="text-xs text-rose-700 mt-0.5">
+              The administrator removed this listing from the marketplace. Saving updates will submit it as a newly updated listing for review.
+            </p>
+          </div>
+        </div>
+      )}
 
       <form onSubmit={handleSave} className="space-y-6">
         {/* Section 1: Basic Info */}
@@ -415,11 +491,18 @@ export function EditProductPage() {
         </div>
 
         <div className="flex justify-end gap-3 pt-4">
-          <Button variant="secondary" onClick={() => navigate(`/seller/products/${id}`)}>
+          <Button variant="secondary" onClick={() => navigate('/seller/products')}>
             Cancel
           </Button>
-          <Button type="submit" variant="primary" size="lg" isLoading={isUpdating} leftIcon={Save}>
-            Save All Updates
+          <Button
+            type="submit"
+            variant="primary"
+            size="lg"
+            isLoading={isUpdating}
+            leftIcon={isRejected ? Send : Save}
+            className={isRejected ? "bg-amber-500 hover:bg-amber-600 text-slate-950 font-black shadow-md" : ""}
+          >
+            {isRejected ? 'Re-submit for Approval' : 'Save All Updates'}
           </Button>
         </div>
       </form>

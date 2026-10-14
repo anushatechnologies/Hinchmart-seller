@@ -1,6 +1,6 @@
 import { create } from 'zustand';
-import { db } from '../mock/db';
-import { authService } from '../services/auth.service';
+import { db } from '../mock/db.js';
+import { authService } from '../services/auth.service.js';
 
 const initialAuth = db.getAuth();
 
@@ -8,21 +8,25 @@ export const useAuthStore = create((set, get) => ({
   user: initialAuth?.user || null,
   token: initialAuth?.token || null,
   isAuthenticated: Boolean(initialAuth?.isAuthenticated && initialAuth?.user),
-  onboardingSellerId: sessionStorage.getItem('hinchmart_onboarding_seller_id') || null,
+  onboardingSellerId: typeof sessionStorage !== 'undefined' ? sessionStorage.getItem('hinchmart_onboarding_seller_id') : null,
   isLoading: false,
   error: null,
 
   setOnboardingSellerId: (sellerId) => {
-    if (sellerId) {
-      sessionStorage.setItem('hinchmart_onboarding_seller_id', String(sellerId));
-    } else {
-      sessionStorage.removeItem('hinchmart_onboarding_seller_id');
+    if (typeof sessionStorage !== 'undefined') {
+      if (sellerId) {
+        sessionStorage.setItem('hinchmart_onboarding_seller_id', String(sellerId));
+      } else {
+        sessionStorage.removeItem('hinchmart_onboarding_seller_id');
+      }
     }
     set({ onboardingSellerId: sellerId });
   },
 
   clearOnboardingSellerId: () => {
-    sessionStorage.removeItem('hinchmart_onboarding_seller_id');
+    if (typeof sessionStorage !== 'undefined') {
+      sessionStorage.removeItem('hinchmart_onboarding_seller_id');
+    }
     set({ onboardingSellerId: null });
   },
 
@@ -139,6 +143,42 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
+  fetchCurrentUser: async () => {
+    try {
+      const details = await authService.fetchCurrentUserDetails();
+      if (details) {
+        set((prev) => ({
+          user: {
+            ...prev.user,
+            ...details,
+          },
+        }));
+      }
+      return details;
+    } catch (err) {
+      console.warn('fetchCurrentUser error:', err);
+      return null;
+    }
+  },
+
+  refreshSession: async () => {
+    try {
+      const session = await authService.refreshSession();
+      if (session) {
+        set((prev) => ({
+          user: {
+            ...prev.user,
+            ...session,
+          },
+        }));
+      }
+      return session;
+    } catch (err) {
+      console.warn('refreshSession error:', err);
+      return null;
+    }
+  },
+
   refreshRole: async () => {
     try {
       const res = await authService.refreshSellerRole();
@@ -170,3 +210,4 @@ export const useAuthStore = create((set, get) => ({
 
   clearError: () => set({ error: null }),
 }));
+

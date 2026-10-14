@@ -8,7 +8,15 @@ export const SellerProtectedRoute = ({ children, requiredRole = 'SELLER' }) => {
   const { isAuthenticated } = useAuthStore();
   const location = useLocation();
 
-  if (loading) {
+  const [timedOut, setTimedOut] = React.useState(false);
+
+  React.useEffect(() => {
+    const timer = setTimeout(() => setTimedOut(true), 1500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const hasLocalSession = Boolean(isAuthenticated || localStorage.getItem('sellerId'));
+  if (loading && !timedOut && !hasLocalSession) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-slate-900 text-white">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-500"></div>
@@ -18,7 +26,7 @@ export const SellerProtectedRoute = ({ children, requiredRole = 'SELLER' }) => {
   }
 
   // 1. Not signed in with Firebase or local session -> Go to login
-  if (!user && !isAuthenticated) {
+  if (!user && !isAuthenticated && !localStorage.getItem('sellerId')) {
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
@@ -28,13 +36,19 @@ export const SellerProtectedRoute = ({ children, requiredRole = 'SELLER' }) => {
     return <Navigate to="/seller/onboarding" replace />;
   }
 
-  // 3. Strict Admin Approval Check: Do not navigate to dashboard until approved!
+  // 3. Admin Approval Check: Strictly verify approval status
+  const isExplicitlyPending =
+    localStorage.getItem('seller_approved') === 'false' ||
+    ['PENDING', 'PENDING_REVIEW'].includes(String(sellerProfile?.verificationStatus || '').toUpperCase());
+
   const isApproved =
-    localStorage.getItem('seller_approved') === 'true' ||
-    sellerProfile?.verified === true ||
-    ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(String(sellerProfile?.verificationStatus || '').toUpperCase()) ||
-    ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(String(sellerProfile?.onboardingStatus || '').toUpperCase()) ||
-    (String(sellerProfile?.role || '').toUpperCase() === 'SELLER' && String(sellerProfile?.onboardingStatus || '').toUpperCase() === 'VERIFIED');
+    !isExplicitlyPending && (
+      localStorage.getItem('seller_approved') === 'true' ||
+      sellerProfile?.verified === true ||
+      ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(String(sellerProfile?.verificationStatus || '').toUpperCase()) ||
+      ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(String(sellerProfile?.onboardingStatus || '').toUpperCase()) ||
+      ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(String(sellerProfile?.status || '').toUpperCase())
+    );
 
   if (!isApproved) {
     return <Navigate to="/pending-approval" replace />;

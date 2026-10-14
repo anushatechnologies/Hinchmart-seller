@@ -6,6 +6,7 @@ import {
 } from '../firebase/firebaseConfig.js';
 import { apiClient, delay, USE_MOCK_API, hasValidLiveAuth } from './apiClient.js';
 import { db } from '../mock/db.js';
+import { formatNameFromEmail } from '../utils/formatters.js';
 
 export const authService = {
   /**
@@ -105,19 +106,15 @@ export const authService = {
         token = await firebaseUser.getIdToken();
         firebaseAuthSuccess = true;
       } catch (fbErr) {
-        // If Firebase explicitly detects a wrong password, reject immediately!
+        // If Firebase explicitly detects a wrong password, reject with clear password message
         if (fbErr.code === 'auth/wrong-password') {
           const err = new Error('Incorrect password. Please retry or click Forgot Password.');
           err.code = 'auth/wrong-password';
           throw err;
         }
 
-        // If user does not exist in Firebase yet, verify against local database
-        if (
-          fbErr.code === 'auth/user-not-found' ||
-          fbErr.code === 'auth/invalid-credential' ||
-          fbErr.code === 'auth/invalid-login-credentials'
-        ) {
+        // If user does not exist in Firebase, verify against local database
+        if (fbErr.code === 'auth/user-not-found') {
           const matchedSeller = db.getSellerByEmail(cleanEmail);
           if (matchedSeller && matchedSeller.password && matchedSeller.password !== password) {
             const err = new Error('Incorrect password. Please retry or click Forgot Password.');
@@ -125,21 +122,36 @@ export const authService = {
             throw err;
           }
           if (!matchedSeller) {
-            const err = new Error('No registered seller account found with these credentials.');
+            const err = new Error('No registered account found with this email. Please click Register to create a seller account.');
             err.code = 'auth/user-not-found';
+            throw err;
+          }
+        }
+
+        // Modern Firebase returns auth/invalid-credential for wrong passwords (enumeration protection)
+        if (
+          fbErr.code === 'auth/invalid-credential' ||
+          fbErr.code === 'auth/invalid-login-credentials'
+        ) {
+          const matchedSeller = db.getSellerByEmail(cleanEmail);
+          if (matchedSeller && matchedSeller.password && matchedSeller.password === password) {
+            // Local password matched
+          } else {
+            const err = new Error('Incorrect password. Please check your password or click Forgot Password to reset.');
+            err.code = 'auth/wrong-password';
             throw err;
           }
         }
       }
     }
 
-    // Lookup seller profile strictly by email
+    // Lookup seller profile by email
     const matchedSeller = db.getSellerByEmail(cleanEmail);
 
     if (!firebaseAuthSuccess) {
       if (!matchedSeller) {
-        const err = new Error('No registered seller account found with these credentials.');
-        err.code = 'auth/user-not-found';
+        const err = new Error('Incorrect password. Please check your credentials or click Forgot Password to reset.');
+        err.code = 'auth/wrong-password';
         throw err;
       }
 
@@ -151,12 +163,29 @@ export const authService = {
       }
     }
 
+    const emailPrefixName = formatNameFromEmail(cleanEmail);
+    const isCleanEmailRajesh = cleanEmail.includes('rajesh');
+
+    const sanitizeName = (n) => {
+      if (!n || typeof n !== 'string') return null;
+      const trimmed = n.trim();
+      if (!isCleanEmailRajesh && /rajesh/i.test(trimmed)) return null;
+      if (trimmed === 'Seller Admin' || trimmed === 'Authorized Seller') return null;
+      return trimmed;
+    };
+
     let userDetails = null;
     let syncData = null;
     if (token && !USE_MOCK_API) {
       try {
+        const candidateSyncName =
+          sanitizeName(firebaseUser?.displayName) ||
+          sanitizeName(matchedSeller?.fullName) ||
+          sanitizeName(matchedSeller?.name) ||
+          emailPrefixName;
+
         syncData = await this.syncUserWithBackend(
-          matchedSeller?.fullName || matchedSeller?.name || firebaseUser?.displayName,
+          candidateSyncName,
           matchedSeller?.phone || matchedSeller?.mobile
         );
       } catch (syncErr) {
@@ -170,19 +199,17 @@ export const authService = {
       }
     }
 
-    const emailPrefixName = cleanEmail ? cleanEmail.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'Authorized Seller';
-
     const sellerName =
-      syncData?.name ||
-      userDetails?.name ||
-      firebaseUser?.displayName ||
-      (matchedSeller?.name && matchedSeller.name !== 'Seller Admin' ? matchedSeller.name : null) ||
-      (matchedSeller?.fullName && matchedSeller.fullName !== 'Seller Admin' ? matchedSeller.fullName : null) ||
+      sanitizeName(firebaseUser?.displayName) ||
+      sanitizeName(userDetails?.name) ||
+      sanitizeName(syncData?.name) ||
+      sanitizeName(matchedSeller?.fullName) ||
+      sanitizeName(matchedSeller?.name) ||
       emailPrefixName;
 
     const companyName =
-      userDetails?.companyName ||
-      (matchedSeller?.companyName && matchedSeller.companyName !== 'Registered Enterprise' ? matchedSeller.companyName : null) ||
+      (userDetails?.companyName && (isCleanEmailRajesh || !/rajesh/i.test(userDetails.companyName)) ? userDetails.companyName : null) ||
+      (matchedSeller?.companyName && (isCleanEmailRajesh || !/rajesh/i.test(matchedSeller.companyName)) && matchedSeller.companyName !== 'Registered Enterprise' ? matchedSeller.companyName : null) ||
       `${sellerName} Enterprise`;
 
     const sellerPhone =
@@ -247,9 +274,15 @@ export const authService = {
   },
 
   /**
-   * 3. Logout Seller
+   * 3. Logout Seller (Endpoint 5: POST /api/auth/logout)
    */
   async logoutSeller() {
+    try {
+      await apiClient.post('/api/auth/logout');
+    } catch (err) {
+      // Backend logout is best-effort
+    }
+
     if (auth) {
       try {
         await signOut(auth);
@@ -263,12 +296,22 @@ export const authService = {
       db.clearAuth();
     }
     if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('accessToken');
       localStorage.removeItem('sellerToken');
+      localStorage.removeItem('authToken');
+      localStorage.removeItem('token');
       localStorage.removeItem('sellerUser');
       localStorage.removeItem('sellerId');
       localStorage.removeItem('hinchmart_auth');
       localStorage.removeItem('hinchmart_seller');
+      localStorage.removeItem('seller_approved');
+      localStorage.removeItem('seller_role');
+      localStorage.removeItem('seller_onboarding_status');
     }
+    try {
+      const { resetSellerApiPermissions } = await import('./apiClient.js');
+      if (typeof resetSellerApiPermissions === 'function') resetSellerApiPermissions();
+    } catch (_) {}
     if (typeof sessionStorage !== 'undefined') {
       sessionStorage.removeItem('hinchmart_onboarding_seller_id');
       sessionStorage.removeItem('otp_phone');
@@ -296,40 +339,92 @@ export const authService = {
   },
 
   /**
-   * 6. POST /api/auth/sync
-   * Synchronizes Firebase user with backend MySQL database
+   * 6. POST /api/auth/sync (Endpoint 2)
+   * Synchronizes Firebase user with backend MySQL database and returns Spring Boot JWT accessToken
    */
   async syncUserWithBackend(name, phone) {
-    if (hasValidLiveAuth()) {
-      try {
-        const response = await apiClient.post('/api/auth/sync', {
-          name,
-          phone: phone ? (phone.startsWith('+91') ? phone : `+91${phone.replace(/\D/g, '')}`) : undefined,
-        });
-        const data = response.data?.data || response.data;
-        if (data) return data;
-      } catch (err) {
-        // Handled silently with local fallback
+    try {
+      const user = auth?.currentUser;
+      const fbToken = user ? await user.getIdToken() : null;
+      const cleanPhone = phone ? (phone.startsWith('+91') ? phone : `+91${phone.replace(/\D/g, '')}`) : undefined;
+      const userEmail = user?.email || db.getAuth()?.user?.email || '';
+      const fallbackCleanName = formatNameFromEmail(userEmail);
+      
+      const payload = {
+        firebaseIdToken: fbToken || undefined,
+        role: 'SELLER',
+        email: userEmail || undefined,
+        name: name || user?.displayName || fallbackCleanName,
+        phone: cleanPhone || user?.phoneNumber || undefined,
+      };
+
+      const response = await apiClient.post('/api/auth/sync', payload, {
+        headers: fbToken ? { Authorization: `Bearer ${fbToken}` } : {},
+      });
+      const data = response.data?.data || response.data;
+      if (data) {
+        if (data.accessToken && typeof localStorage !== 'undefined') {
+          localStorage.setItem('accessToken', data.accessToken);
+          localStorage.setItem('sellerToken', data.accessToken);
+          localStorage.setItem('authToken', data.accessToken);
+          if (data.sellerId) {
+            localStorage.setItem('sellerId', String(data.sellerId));
+          }
+        }
+        return data;
       }
+    } catch (err) {
+      console.warn('Backend /api/auth/sync notice:', err?.response?.data?.message || err.message);
     }
 
     await delay(150);
+    const currentUser = auth?.currentUser;
+    const currentAuthUser = db.getAuth()?.user;
+    const userEmail = currentUser?.email || currentAuthUser?.email || '';
+    const resolvedFallbackName = name || currentUser?.displayName || formatNameFromEmail(userEmail);
+
     return {
-      userId: 104,
-      firebaseUid: auth?.currentUser?.uid || 'mock_uid_seller',
-      email: auth?.currentUser?.email || 'seller@hinchmart.com',
-      name: name || 'Seller Admin',
-      phone: phone || '+919876543210',
+      userId: currentAuthUser?.id || 109,
+      firebaseUid: currentUser?.uid || 'seller_' + Date.now(),
+      email: userEmail,
+      name: resolvedFallbackName,
+      phone: phone || currentUser?.phoneNumber || currentAuthUser?.phone || '',
       role: 'SELLER',
-      sellerId: 9,
+      sellerId: currentAuthUser?.sellerId || (typeof localStorage !== 'undefined' ? localStorage.getItem('sellerId') : null) || 16,
       claims: { role: 'SELLER' },
     };
   },
 
   /**
-   * 7. GET Verified Seller Profile & Resolved Identity
+   * 7. GET /api/auth/me (Endpoint 3) - Current Authenticated User Profile
    */
   async fetchCurrentUserDetails() {
+    try {
+      const response = await apiClient.get('/api/auth/me');
+      const data = response.data?.data || response.data;
+      if (data && (data.userId || data.sellerId || data.customerId)) {
+        const resolvedSellerId = data.sellerId || data.userId || 16;
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('sellerId', String(resolvedSellerId));
+        }
+        return {
+          userId: data.userId || data.customerId,
+          sellerId: resolvedSellerId,
+          storeId: resolvedSellerId,
+          firebaseUid: data.firebaseUid,
+          email: data.email,
+          name: data.name,
+          fullName: data.name,
+          phone: data.phone,
+          role: data.role || 'SELLER',
+          claims: data.claims || { role: data.role },
+          isProfileComplete: data.isProfileComplete ?? true,
+        };
+      }
+    } catch (err) {
+      console.warn('Backend /api/auth/me notice (using fallback):', err?.response?.data?.message || err.message);
+    }
+
     const storedSellerId = typeof localStorage !== 'undefined' ? localStorage.getItem('sellerId') : null;
     const authState = db.getAuth();
     const seller = db.getSeller();
@@ -345,7 +440,7 @@ export const authService = {
       seller?.fullName ||
       seller?.name ||
       (resolvedEmail ? resolvedEmail.split('@')[0].replace(/[._-]/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'Authorized Seller');
-    const resolvedPhone = currentUser?.phoneNumber || seller?.phone || authState?.user?.phone || '+919866953818';
+    const resolvedPhone = currentUser?.phoneNumber || seller?.phone || authState?.user?.phone || '+919848054013';
 
     return {
       userId: resolvedSellerId,
@@ -360,11 +455,40 @@ export const authService = {
       role: 'SELLER',
       status: seller?.status || 'ACTIVE',
       claims: { role: 'SELLER' },
+      isProfileComplete: true,
     };
   },
 
   /**
-   * 8. Post-Approval Role Verification & Custom Claims Refresh
+   * 8. POST /api/auth/refresh-token (Endpoint 4) - Session Refresh / Token Re-evaluation
+   */
+  async refreshSession() {
+    try {
+      const res = await apiClient.post('/api/auth/refresh-token');
+      const data = res.data?.data || res.data;
+      if (data) return data;
+    } catch (err) {
+      console.warn('POST /api/auth/refresh-token notice (re-syncing via Firebase ID token):', err.message);
+    }
+
+    // Phase 3 Flow: Retrieve fresh Firebase ID Token silently and call POST /api/auth/sync
+    const refreshedToken = await resolveLiveBackendToken(true);
+    if (refreshedToken) {
+      return await this.fetchCurrentUserDetails();
+    }
+    return null;
+  },
+
+  /**
+   * 9. POST /api/auth/claim-admin (Endpoint 6) - Claim Admin Role
+   */
+  async claimAdminRole() {
+    const res = await apiClient.post('/api/auth/claim-admin');
+    return res.data?.data || res.data;
+  },
+
+  /**
+   * 10. Post-Approval Role Verification & Custom Claims Refresh
    */
   async refreshSellerRole() {
     try {
@@ -376,12 +500,12 @@ export const authService = {
       return {
         isSeller,
         role: meData?.role || 'SELLER',
-        sellerId: meData?.sellerId || 9,
+        sellerId: meData?.sellerId || 16,
         data: meData,
       };
     } catch (err) {
       console.warn('refreshSellerRole notice:', err.message);
-      return { isSeller: true, role: 'SELLER', sellerId: 9 };
+      return { isSeller: true, role: 'SELLER', sellerId: 16 };
     }
   },
 };

@@ -2,21 +2,121 @@ import { db } from '../mock/db.js';
 import { apiClient, delay, USE_MOCK_API } from './api.js';
 import { isValidTransition } from '../constants/orderStatus.js';
 
+export function normalizeOrder(raw) {
+  if (!raw) return null;
+  const id = raw.id || raw.orderId || raw.order_id;
+  const orderNumber = raw.orderNumber || raw.order_number || (id ? `ORD-${id}` : `ORD-${Date.now().toString().slice(-6)}`);
+  const createdAt = raw.createdAt || raw.created_at || raw.orderDate || raw.date || new Date().toISOString();
+
+  // Normalize buyer / customer
+  const customerName = raw.customerName || raw.customer_name || raw.buyerName || raw.buyer_name || raw.buyer?.name || 'Customer';
+  const customerCompany = raw.customerCompany || raw.customer_company || raw.buyerCompany || raw.buyer_company || raw.buyer?.company || customerName;
+  const buyer = {
+    name: customerName,
+    company: customerCompany,
+    email: raw.customerEmail || raw.customer_email || raw.buyer?.email || '',
+    phone: raw.customerPhone || raw.customer_phone || raw.buyer?.phone || '',
+    gstin: raw.buyerGstin || raw.customerGstin || raw.buyer?.gstin || '',
+    ...(raw.buyer || {}),
+  };
+
+  // Normalize items
+  const rawItems = raw.items || raw.orderItems || raw.order_items || [];
+  const items = Array.isArray(rawItems)
+    ? rawItems.map((item) => ({
+        id: item.id || item.productId || item.product_id,
+        productId: item.productId || item.product_id || item.id,
+        name: item.name || item.productName || item.product_name || item.title || 'Product Item',
+        sku: item.sku || 'SKU-GEN',
+        quantity: Number(item.quantity ?? item.qty ?? 1),
+        unit: item.unit || 'Pieces',
+        price: Number(item.price ?? item.unitPrice ?? item.unit_price ?? 0),
+        total: Number(item.total ?? item.totalPrice ?? item.total_price ?? ((item.quantity || 1) * (item.price || 0))),
+        imageUrl: item.imageUrl || item.image || null,
+        sellerId: item.sellerId || item.seller_id || raw.sellerId || raw.seller_id,
+      }))
+    : [];
+
+  const totalAmount = Number(raw.totalAmount ?? raw.total_amount ?? raw.total ?? raw.grandTotal ?? 0);
+  const subtotal = Number(raw.subtotal ?? raw.sub_total ?? totalAmount);
+  const gstAmount = Number(raw.gstAmount ?? raw.gst_amount ?? raw.tax ?? 0);
+  const orderStatus = raw.orderStatus || raw.order_status || raw.status || 'Pending';
+  const paymentStatus = raw.paymentStatus || raw.payment_status || (raw.paid ? 'Paid' : 'Pending');
+
+  return {
+    ...raw,
+    id,
+    orderNumber,
+    createdAt,
+    buyer,
+    items,
+    totalAmount,
+    subtotal,
+    gstAmount,
+    orderStatus,
+    paymentStatus,
+    deliveryAddress: raw.deliveryAddress || raw.delivery_address || raw.shippingAddress || raw.shipping_address || {
+      completeAddress: raw.address || 'Delivery Address',
+      city: raw.city || 'Site',
+      state: raw.state || '',
+      pincode: raw.pincode || '',
+    },
+    paymentMethod: raw.paymentMethod || raw.payment_method || 'Online Payment',
+    invoice: raw.invoice || null,
+  };
+}
+
 export const orderService = {
   /**
    * Phase 6 — Order Fulfilment
-   * GET /api/orders (scoped to authenticated seller)
+   * GET /api/seller/orders or /api/orders (scoped to authenticated seller)
    */
   async getOrders(filters = {}) {
+    const currentSeller = db.getSeller();
+    const storedSellerId = typeof localStorage !== 'undefined' ? (localStorage.getItem('sellerId') || localStorage.getItem('hinchmart_seller_id')) : null;
+    const rawSellerId = storedSellerId || currentSeller?.sellerId || currentSeller?.id;
+    const cleanSellerId = rawSellerId ? String(rawSellerId).replace(/^seller_/, '').trim() : null;
+
     if (!USE_MOCK_API) {
+      const queryParams = { ...filters };
+      if (cleanSellerId && !queryParams.sellerId) {
+        queryParams.sellerId = cleanSellerId;
+      }
+
+      const extractList = (res) => {
+        const raw = res?.data?.data || res?.data;
+        if (Array.isArray(raw)) return raw;
+        if (raw?.content && Array.isArray(raw.content)) return raw.content;
+        if (raw?.orders && Array.isArray(raw.orders)) return raw.orders;
+        return null;
+      };
+
+      // 1. Try dedicated seller endpoint: GET /api/seller/orders
       try {
-        const response = await apiClient.get('/api/orders', { params: filters });
-        const list = response.data?.data || response.data;
-        if (Array.isArray(list)) return list;
-      } catch (err) {}
+        const response = await apiClient.get('/api/seller/orders', { params: queryParams });
+        const list = extractList(response);
+        if (Array.isArray(list) && list.length > 0) {
+          return list.map(normalizeOrder);
+        }
+      } catch (err1) {
+        // Fallback to general order endpoint
+      }
+
+      // 2. Try general endpoint with seller query param: GET /api/orders
+      try {
+        const response = await apiClient.get('/api/orders', { params: queryParams });
+        const list = extractList(response);
+        if (Array.isArray(list) && list.length > 0) {
+          return list.map(normalizeOrder);
+        }
+      } catch (err2) {
+        // Log notice for dev/monitoring
+        console.warn('Backend orders fetch notice:', err2?.response?.data?.message || err2?.message);
+      }
     }
+
     await delay(150);
-    let orders = db.getOrders();
+    let orders = (db.getOrders() || []).map(normalizeOrder);
 
     // 1. Status Filter
     if (filters.status && filters.status !== 'All') {
@@ -115,20 +215,26 @@ export const orderService = {
 
   /**
    * Fetch single order details by ID or Order Number
-   * GET /api/orders/{id}
+   * GET /api/seller/orders/{id} or /api/orders/{id}
    */
   async getOrderById(id) {
     if (!USE_MOCK_API) {
       try {
-        const response = await apiClient.get(`/api/orders/${id}`);
+        const response = await apiClient.get(`/api/seller/orders/${id}`);
         const data = response.data?.data || response.data;
-        if (data) return data;
-      } catch (err) {}
+        if (data) return normalizeOrder(data);
+      } catch (err1) {
+        try {
+          const response = await apiClient.get(`/api/orders/${id}`);
+          const data = response.data?.data || response.data;
+          if (data) return normalizeOrder(data);
+        } catch (err2) {}
+      }
     }
     await delay(100);
     const order = db.getOrderById(id);
     if (!order) throw new Error(`Order ${id} not found.`);
-    return order;
+    return normalizeOrder(order);
   },
 
   /**

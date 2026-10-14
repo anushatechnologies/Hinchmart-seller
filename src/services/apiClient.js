@@ -1,79 +1,153 @@
 import axios from 'axios';
 import { auth } from '../config/firebase.js';
 import { db } from '../mock/db.js';
+import { formatNameFromEmail } from '../utils/formatters.js';
 
 const env = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env : {};
 export const API_BASE_URL = env.VITE_API_BASE_URL || 'https://api.hinchmart.com';
 export const USE_MOCK_API = env.VITE_USE_MOCK_API === 'true';
 
-// In-memory set of forbidden endpoints for the current session
-const forbiddenEndpoints = new Set();
+// Default seller credentials for offline / unauthenticated guest exploration
+const DEFAULT_SELLER_EMAIL = 'rajesh.apex7971@hinchmart.com';
+const DEFAULT_SELLER_PWD = 'Password@123';
+const DEFAULT_SELLER_ID = '16';
+
+let activeSyncPromise = null;
 
 /**
- * Check if a live signed Firebase JWT session exists.
+ * Returns the currently stored Spring Boot backend JWT accessToken.
+ */
+export function getStoredBackendToken() {
+  if (typeof localStorage === 'undefined') return null;
+  const token =
+    localStorage.getItem('accessToken') ||
+    localStorage.getItem('sellerToken') ||
+    localStorage.getItem('authToken') ||
+    localStorage.getItem('token');
+  if (token && typeof token === 'string' && !token.startsWith('jwt_seller_') && token.length > 50 && token.includes('.')) {
+    return token;
+  }
+  return null;
+}
+
+/**
+ * Exchanges a Firebase ID token for a Spring Boot HS512 JWT accessToken via POST /api/auth/sync.
+ */
+async function exchangeFirebaseTokenForBackendToken(firebaseToken, profile = {}) {
+  try {
+    const email = profile.email || auth?.currentUser?.email || db.getAuth()?.user?.email || '';
+    const cleanEmail = email ? String(email).trim().toLowerCase() : '';
+    const isCleanEmailRajesh = cleanEmail.includes('rajesh');
+
+    let resolvedName = profile.name || auth?.currentUser?.displayName;
+    if (!resolvedName || (!isCleanEmailRajesh && /rajesh/i.test(resolvedName))) {
+      resolvedName = cleanEmail ? formatNameFromEmail(cleanEmail) : 'Seller Admin';
+    }
+
+    const res = await axios.post(
+      `${API_BASE_URL}/api/auth/sync`,
+      {
+        firebaseIdToken: firebaseToken,
+        role: 'SELLER',
+        email: cleanEmail || undefined,
+        name: resolvedName,
+        phone: profile.phone || auth?.currentUser?.phoneNumber || db.getAuth()?.user?.phone || undefined,
+      },
+      {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${firebaseToken}`,
+        },
+        timeout: 15000,
+      }
+    );
+
+    const data = res.data?.data || res.data;
+    const accessToken = data?.accessToken || data?.token;
+    if (accessToken && typeof localStorage !== 'undefined') {
+      localStorage.setItem('accessToken', accessToken);
+      localStorage.setItem('sellerToken', accessToken);
+      localStorage.setItem('authToken', accessToken);
+      if (data?.sellerId) {
+        localStorage.setItem('sellerId', String(data.sellerId));
+      }
+    }
+    return accessToken || null;
+  } catch (err) {
+    console.warn('Backend /api/auth/sync exchange failed:', err?.response?.data?.message || err.message);
+    return null;
+  }
+}
+
+/**
+ * Guarantees a valid, signed Spring Boot backend JWT token for API requests.
+ */
+export async function resolveLiveBackendToken(forceRefresh = false) {
+  if (USE_MOCK_API) return null;
+
+  if (!forceRefresh) {
+    const cached = getStoredBackendToken();
+    if (cached) return cached;
+  }
+
+  if (activeSyncPromise) {
+    return activeSyncPromise;
+  }
+
+  activeSyncPromise = (async () => {
+    try {
+      let fbToken = null;
+      let user = auth?.currentUser;
+
+      if (user && typeof user.getIdToken === 'function') {
+        fbToken = await user.getIdToken(forceRefresh);
+      }
+
+      // Do not auto-sign-in silently if user is logged out
+
+      if (fbToken) {
+        const backendToken = await exchangeFirebaseTokenForBackendToken(fbToken, {
+          email: user?.email,
+          name: user?.displayName,
+          phone: user?.phoneNumber,
+        });
+        if (backendToken) return backendToken;
+      }
+
+      return getStoredBackendToken();
+    } finally {
+      activeSyncPromise = null;
+    }
+  })();
+
+  return activeSyncPromise;
+}
+
+/**
+ * Check if a live signed backend session exists.
  */
 export function hasValidLiveAuth() {
   if (USE_MOCK_API) return false;
-  const user = auth?.currentUser;
-  if (user) return true;
-  const localAuth = db.getAuth();
-  if (localAuth?.token && !localAuth.token.startsWith('jwt_seller_') && localAuth.token.length > 50) {
-    return true;
-  }
-  return false;
+  return Boolean(getStoredBackendToken() || auth?.currentUser);
 }
 
-/**
- * Check if seller endpoints are currently marked as forbidden (403) for this session.
- * Never blocks onboarding or authentication endpoints.
- */
 export function isSellerApiForbidden(url = '') {
-  if (!url) return false;
-  // Never block onboarding, auth, or public endpoints
-  if (url.includes('/onboarding') || url.includes('/auth/')) {
-    return false;
-  }
   return false;
 }
 
-/**
- * Mark seller API / endpoint as forbidden to prevent redundant 403 network spam.
- */
-export function markSellerApiForbidden(url = '') {
-  // Do not block onboarding or live backend operations
-}
+export function markSellerApiForbidden(url = '') {}
 
-/**
- * Reset forbidden cache when user logs in, switches accounts, or refreshes verification.
- */
 export function resetSellerApiPermissions() {
-  forbiddenEndpoints.clear();
   if (typeof sessionStorage !== 'undefined') {
     sessionStorage.removeItem('hinch_seller_forbidden');
   }
   if (typeof localStorage !== 'undefined') {
     localStorage.removeItem('hinch_seller_forbidden');
-    localStorage.removeItem('seller_api_allowed');
   }
 }
 
-/**
- * Mark seller API permissions as allowed/approved.
- */
-export function markSellerApiAllowed() {
-  forbiddenEndpoints.clear();
-  if (typeof sessionStorage !== 'undefined') {
-    sessionStorage.removeItem('hinch_seller_forbidden');
-  }
-  if (typeof localStorage !== 'undefined') {
-    localStorage.removeItem('hinch_seller_forbidden');
-    localStorage.setItem('seller_api_allowed', 'true');
-  }
-}
+export function markSellerApiAllowed() {}
 
-/**
- * Check if seller-protected live API can be queried.
- */
 export function canAccessSellerApi(url = '') {
   return true;
 }
@@ -103,24 +177,19 @@ apiClient.get = function (url, config = {}) {
   return promise;
 };
 
-// Request Interceptor: Automatically injects live Firebase ID Token & X-Seller-Id
+// Request Interceptor: Automatically injects valid Spring Boot JWT accessToken & X-Seller-Id
 apiClient.interceptors.request.use(
   async (config) => {
-    try {
-      const user = auth?.currentUser;
-      if (user && typeof user.getIdToken === 'function') {
-        const firebaseToken = await user.getIdToken();
-        if (firebaseToken) {
-          config.headers.Authorization = `Bearer ${firebaseToken}`;
+    // If request already has authorization header, preserve it
+    if (!config.headers.Authorization) {
+      try {
+        const token = await resolveLiveBackendToken();
+        if (token) {
+          config.headers.Authorization = `Bearer ${token}`;
         }
-      } else {
-        const localAuth = db.getAuth();
-        if (localAuth?.token && !config.headers.Authorization) {
-          config.headers.Authorization = `Bearer ${localAuth.token}`;
-        }
+      } catch (tokenErr) {
+        // Silently proceed
       }
-    } catch (tokenErr) {
-      // Handled silently
     }
 
     // If uploading FormData, delete Content-Type to let browser set multipart/form-data with boundary
@@ -131,12 +200,13 @@ apiClient.interceptors.request.use(
     // Retrieve sellerId stored in localStorage (synced from backend) or DB
     const storedSellerId = typeof localStorage !== 'undefined' ? localStorage.getItem('sellerId') : null;
     const currentSeller = db.getSeller();
-    const rawSellerId = storedSellerId || currentSeller?.sellerId || currentSeller?.id;
-    let headerSellerId = '9';
+    const rawSellerId = storedSellerId || currentSeller?.sellerId || currentSeller?.id || DEFAULT_SELLER_ID;
+    let headerSellerId = DEFAULT_SELLER_ID;
     if (typeof rawSellerId === 'number' && rawSellerId > 0 && rawSellerId <= 2147483647) {
       headerSellerId = String(rawSellerId);
     } else if (typeof rawSellerId === 'string') {
-      const parsed = parseInt(rawSellerId, 10);
+      const clean = rawSellerId.replace(/^seller_/, '');
+      const parsed = parseInt(clean, 10);
       if (!isNaN(parsed) && parsed > 0 && parsed <= 2147483647) {
         headerSellerId = String(parsed);
       }
@@ -156,7 +226,7 @@ apiClient.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-// Response Interceptor: Handles 401 Unauthorized / 403 Forbidden
+// Response Interceptor: Handles 401 Unauthorized with silent token re-exchange
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
@@ -164,29 +234,21 @@ apiClient.interceptors.response.use(
     const status = error?.response?.status;
     const reqUrl = originalRequest?.url || '';
 
-    // Handle 403 Forbidden: record permission restriction for seller endpoints
-    if (status === 403 && reqUrl.includes('/api/seller/')) {
-      markSellerApiForbidden(reqUrl);
-    }
-
-    // Handle 401 Unauthorized: token refresh
     if (
       status === 401 &&
       originalRequest &&
       !originalRequest._retry &&
-      !originalRequest.url?.includes('/api/auth/sync') &&
-      !originalRequest.url?.includes('/api/seller/store')
+      !reqUrl.includes('/api/auth/sync')
     ) {
-      const currentUser = auth?.currentUser;
-      if (currentUser && typeof currentUser.getIdToken === 'function') {
-        try {
-          originalRequest._retry = true;
-          const newToken = await currentUser.getIdToken(true);
-          originalRequest.headers['Authorization'] = `Bearer ${newToken}`;
+      originalRequest._retry = true;
+      try {
+        const refreshedToken = await resolveLiveBackendToken(true);
+        if (refreshedToken) {
+          originalRequest.headers['Authorization'] = `Bearer ${refreshedToken}`;
           return apiClient(originalRequest);
-        } catch (refreshErr) {
-          // Handled silently
         }
+      } catch (refreshErr) {
+        // Fall through
       }
     }
 

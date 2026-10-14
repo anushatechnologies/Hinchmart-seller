@@ -66,10 +66,10 @@ export function BrandsPage() {
   const [brandName, setBrandName] = useState('');
   const [brandSlug, setBrandSlug] = useState('');
   const [slugManuallyEdited, setSlugManuallyEdited] = useState(false);
-  const [brandLogo, setBrandLogo] = useState('https://images.unsplash.com/photo-1504307651254-35680f356dfd?w=800&auto=format&fit=crop&q=80');
+  const [brandLogo, setBrandLogo] = useState('');
   const [displaySortOrder, setDisplaySortOrder] = useState('0');
   const [isActive, setIsActive] = useState(true);
-  const [selectedPreset, setSelectedPreset] = useState('Tata');
+  const [selectedPreset, setSelectedPreset] = useState('');
   const [isSaving, setIsSaving] = useState(false);
 
   // Edit Brand Modal State

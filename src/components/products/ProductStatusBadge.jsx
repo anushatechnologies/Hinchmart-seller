@@ -1,10 +1,42 @@
 import React from 'react';
-import { Clock, CheckCircle2, XCircle, AlertCircle } from 'lucide-react';
+import { Clock, CheckCircle2, XCircle, AlertCircle, Trash2 } from 'lucide-react';
 
-export function ProductStatusBadge({ status, className = '' }) {
-  const normalizedStatus = String(status || 'PENDING').toUpperCase();
+export function ProductStatusBadge({ status, product, className = '' }) {
+  const isRejected =
+    status === 'REJECTED' ||
+    product?.status === 'REJECTED' ||
+    product?.approvalStatus === 'REJECTED';
+
+  const isExplicitlyDeletedByAdmin =
+    !isRejected && (
+      status === 'DELETED_BY_ADMIN' ||
+      status === 'DELETED' ||
+      status === 'REMOVED_BY_ADMIN' ||
+      Boolean(product?.deletedByAdmin) ||
+      product?.status === 'DELETED_BY_ADMIN' ||
+      product?.approvalStatus === 'DELETED_BY_ADMIN'
+    );
+
+  const normalizedStatus = isExplicitlyDeletedByAdmin
+    ? 'DELETED_BY_ADMIN'
+    : isRejected
+    ? 'REJECTED'
+    : String(status || product?.status || 'PENDING').toUpperCase();
 
   switch (normalizedStatus) {
+    case 'DELETED_BY_ADMIN':
+    case 'DELETED':
+    case 'REMOVED_BY_ADMIN':
+      return (
+        <span
+          title="Listing was removed from marketplace by Admin"
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-black bg-rose-600 text-white shadow-xs ${className}`}
+        >
+          <Trash2 className="w-3.5 h-3.5 text-white" />
+          <span>DELETED BY ADMIN</span>
+        </span>
+      );
+
     case 'APPROVED':
     case 'ACTIVE':
       return (

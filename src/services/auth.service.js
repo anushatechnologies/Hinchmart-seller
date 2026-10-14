@@ -1,5 +1,5 @@
 import { db } from '../mock/db.js';
-import { delay } from './apiClient.js';
+import { delay, apiClient } from './apiClient.js';
 import { sendFirebasePhoneOtp, verifyFirebasePhoneOtp } from '../config/firebase.js';
 import { authService as coreAuthService } from './authService.js';
 
@@ -8,14 +8,38 @@ export const authService = {
 
   /**
    * 1. Check whether account exists for mobile number
+   * Uses Endpoint 1: GET /api/auth/check-phone?phone=...
    */
   async checkAccountExists(mobileNumber) {
-    await delay(300);
     const cleanNumber = String(mobileNumber).replace(/\D/g, '').slice(-10);
     if (!/^[6-9][0-9]{9}$/.test(cleanNumber)) {
       throw new Error('Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9.');
     }
 
+    const formattedPhone = `+91${cleanNumber}`;
+
+    // 1. Check live backend API first
+    try {
+      const response = await apiClient.get('/api/auth/check-phone', {
+        params: { phone: formattedPhone },
+      });
+      const data = response.data?.data || response.data;
+      if (data && typeof data.exists === 'boolean') {
+        const sellerName = data.name || '';
+        return {
+          exists: data.exists,
+          phone: cleanNumber,
+          formattedPhone: `+91 ${cleanNumber}`,
+          sellerName,
+          role: data.role || 'SELLER',
+          message: response.data?.message || (data.exists ? 'Account found. Ready to send OTP.' : 'No registered seller account found for this mobile number.'),
+        };
+      }
+    } catch (err) {
+      console.warn('Backend /api/auth/check-phone check fallback:', err?.response?.data?.message || err.message);
+    }
+
+    // 2. Fallback to local db if backend is unreachable or returns unexpected format
     const seller = db.getSellerByPhone(cleanNumber);
     if (!seller) {
       return {
@@ -26,13 +50,14 @@ export const authService = {
       };
     }
 
-    const sellerName = seller?.name || seller?.fullName || seller?.companyName || 'Seller Admin';
+    const sellerName = seller?.name || seller?.fullName || seller?.companyName || '';
 
     return {
       exists: true,
       phone: cleanNumber,
       formattedPhone: `+91 ${cleanNumber}`,
       sellerName,
+      role: seller?.role || 'SELLER',
       message: 'Account found. Ready to send OTP.',
     };
   },
@@ -77,6 +102,7 @@ export const authService = {
 
   /**
    * 3. Verify 6-digit OTP and establish session
+   * Exchanges Firebase token with backend via POST /api/auth/sync
    */
   async verifyOtp({ phone, otp, confirmationResult = null }) {
     await delay(350);
@@ -88,9 +114,12 @@ export const authService = {
     }
 
     let firebaseToken = null;
+    let firebaseUser = null;
+
     if (confirmationResult) {
       const fbRes = await verifyFirebasePhoneOtp(confirmationResult, cleanOtp);
       if (fbRes?.success && fbRes?.user && typeof fbRes.user.getIdToken === 'function') {
+        firebaseUser = fbRes.user;
         firebaseToken = await fbRes.user.getIdToken();
       } else if (fbRes?.success === false) {
         throw new Error(fbRes.error || 'Invalid OTP code. Please check and try again.');
@@ -103,38 +132,64 @@ export const authService = {
       }
     }
 
-    let existingSeller = db.getSellerByPhone(cleanNumber) || db.getSeller();
-    if (!existingSeller) {
-      throw new Error('Seller account not found for this mobile number. Please register your business first.');
+    // Backend Token Exchange: POST /api/auth/sync
+    let syncData = null;
+    let backendToken = null;
+    try {
+      syncData = await coreAuthService.syncUserWithBackend(
+        firebaseUser?.displayName,
+        `+91${cleanNumber}`
+      );
+      if (syncData?.accessToken) {
+        backendToken = syncData.accessToken;
+      }
+    } catch (syncErr) {
+      console.warn('Backend sync in verifyOtp notice:', syncErr.message);
     }
 
-    const sellerName = existingSeller.name || existingSeller.fullName || 'Authorized Seller';
-    const companyName = existingSeller.companyName || `${sellerName} Enterprise`;
+    let existingSeller = db.getSellerByPhone(cleanNumber) || db.getSeller();
+    const sellerName = syncData?.name || existingSeller?.name || existingSeller?.fullName || '';
+    const companyName = existingSeller?.companyName || (sellerName ? `${sellerName} Enterprise` : '');
 
-    db.updateSeller({
-      ...existingSeller,
-      name: sellerName,
-      fullName: sellerName,
-      companyName: companyName,
-    });
+    const effectiveToken = backendToken || firebaseToken || 'jwt_seller_' + Math.random().toString(36).substring(2);
 
-    const profileStatus = this.checkProfileCompletion(existingSeller);
     const authData = {
       isAuthenticated: true,
       user: {
-        id: existingSeller.id || `seller_${cleanNumber}`,
-        sellerId: existingSeller.id || `seller_${cleanNumber}`,
+        id: syncData?.sellerId || existingSeller?.id || `seller_${cleanNumber}`,
+        sellerId: syncData?.sellerId || existingSeller?.id || `seller_${cleanNumber}`,
         name: sellerName,
         fullName: sellerName,
-        email: existingSeller.email || `seller_${cleanNumber}@hinchmart.com`,
-        phone: existingSeller.phone || `+91 ${cleanNumber}`,
-        role: 'SELLER_ADMIN',
+        email: syncData?.email || existingSeller?.email || '',
+        phone: syncData?.phone || existingSeller?.phone || `+91 ${cleanNumber}`,
+        role: syncData?.role || 'SELLER',
         companyName: companyName,
       },
-      token: firebaseToken || 'jwt_seller_' + Math.random().toString(36).substring(2),
+      token: effectiveToken,
     };
 
     db.setAuth(authData);
+    if (existingSeller) {
+      db.updateSeller({
+        ...existingSeller,
+        id: authData.user.sellerId,
+        sellerId: authData.user.sellerId,
+        name: sellerName,
+        fullName: sellerName,
+        companyName: companyName,
+      });
+    }
+
+    if (backendToken && typeof localStorage !== 'undefined') {
+      localStorage.setItem('accessToken', backendToken);
+      localStorage.setItem('sellerToken', backendToken);
+      localStorage.setItem('authToken', backendToken);
+      if (syncData?.sellerId) {
+        localStorage.setItem('sellerId', String(syncData.sellerId));
+      }
+    }
+
+    const profileStatus = this.checkProfileCompletion(existingSeller);
 
     return {
       success: true,
@@ -142,8 +197,9 @@ export const authService = {
       isProfileComplete: profileStatus.isComplete,
       incompleteSections: profileStatus.incompleteSections,
       user: authData.user,
-      seller: existingSeller,
-      token: authData.token,
+      seller: existingSeller || authData.user,
+      token: effectiveToken,
+      accessToken: backendToken || effectiveToken,
     };
   },
 
@@ -168,12 +224,12 @@ export const authService = {
     const liveUser = {
       id: sellerId,
       sellerId: sellerId,
-      name: registrationData.fullName || registrationData.name || 'Authorized Seller',
-      fullName: registrationData.fullName || registrationData.name || 'Authorized Seller',
+      name: registrationData.fullName || registrationData.name || '',
+      fullName: registrationData.fullName || registrationData.name || '',
       email: registrationData.email || '',
       phone: `+91 ${cleanNumber}`,
       role: 'SELLER',
-      companyName: registrationData.companyName || 'Enterprise',
+      companyName: registrationData.companyName || '',
     };
 
     const authData = {

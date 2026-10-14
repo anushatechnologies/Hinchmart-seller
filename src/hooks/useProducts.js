@@ -16,17 +16,33 @@ export function useProducts(filters = {}) {
   const query = useQuery({
     queryKey: PRODUCT_QUERY_KEYS.list(filters),
     queryFn: () => sellerProductService.getSellerProducts(filters),
+    refetchOnWindowFocus: true,
+    refetchInterval: 10000,
   });
 
   const createMutation = useMutation({
     mutationFn: (newProduct) => sellerProductService.createSellerProduct(newProduct),
     onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: PRODUCT_QUERY_KEYS.all });
-      addToast({
-        title: 'Product Created',
-        message: `${data.title || data.name} submitted successfully for review`,
-        type: 'success',
+      // Direct React Query cache update across all list keys so the product appears instantly
+      queryClient.setQueriesData({ queryKey: ['seller-products'] }, (old) => {
+        if (!Array.isArray(old)) return [data];
+        const exists = old.some((p) => String(p.id) === String(data.id) || String(p.productId) === String(data.productId));
+        return exists ? old : [data, ...old];
       });
+      queryClient.invalidateQueries({ queryKey: PRODUCT_QUERY_KEYS.all });
+      if (data?.backendSyncNotice) {
+        addToast({
+          title: 'Product Saved Locally (Backend Warning)',
+          message: `${data.title || data.name} saved locally. Notice: Backend rejected submission (${data.backendSyncNotice}). Admin won't see this in MySQL until backend permissions are enabled.`,
+          type: 'warning',
+        });
+      } else {
+        addToast({
+          title: 'Product Created',
+          message: `${data.title || data.name} submitted successfully to backend database for review`,
+          type: 'success',
+        });
+      }
     },
     onError: (error) => {
       addToast({
@@ -155,6 +171,7 @@ export function useProduct(id) {
     queryKey: PRODUCT_QUERY_KEYS.detail(id),
     queryFn: () => sellerProductService.getSellerProductById(id),
     enabled: Boolean(id),
+    refetchOnWindowFocus: true,
   });
 
   const updateMutation = useMutation({

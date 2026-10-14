@@ -86,6 +86,17 @@ export const step1PersonalSchema = z
         message: 'Please upload your PAN Card document (Max 10MB).',
       }
     ),
+
+    gstin: z
+      .string()
+      .optional()
+      .refine(
+        (val) => !val || /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/.test(val.trim().toUpperCase()),
+        'Please enter a valid 15-character GSTIN (e.g. 29ABCDE1234F1Z5).'
+      ),
+
+    aadhaarCardImage: z.any().optional(),
+    gstCertificateImage: z.any().optional(),
   })
   .refine((data) => data.password === data.confirmPassword, {
     message: 'Passwords do not match.',

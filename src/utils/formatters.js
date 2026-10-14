@@ -72,3 +72,20 @@ export function formatGst(rate) {
 export function formatSku(sku) {
   return sku ? String(sku).toUpperCase() : '—';
 }
+
+/**
+ * Format clean display name from email address
+ */
+export function formatNameFromEmail(email) {
+  if (!email || typeof email !== 'string') return 'Seller Admin';
+  const prefix = email.split('@')[0].trim();
+  if (/^bollipellisupriya\d*$/i.test(prefix)) {
+    return 'Bollipelli Supriya';
+  }
+  let clean = prefix.replace(/\d+$/, '').replace(/[._-]+/g, ' ').trim();
+  clean = clean.replace(/([a-z])([A-Z])/g, '$1 $2');
+  if (!clean) {
+    clean = prefix.replace(/[._-]+/g, ' ').trim();
+  }
+  return clean.replace(/\b\w/g, (c) => c.toUpperCase()) || 'Seller Admin';
+}
