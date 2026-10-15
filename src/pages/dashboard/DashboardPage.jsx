@@ -127,21 +127,27 @@ export function DashboardPage() {
   };
 
   const kpis = analytics?.kpis || {};
-  const rawRevenueOverview = analytics?.revenueOverview || [];
-  const rawCategoryBreakdown = analytics?.categoryBreakdown || [];
+  const rawRevenueOverview = Array.isArray(analytics?.revenueOverview) ? analytics.revenueOverview : [];
+  const rawCategoryBreakdown = Array.isArray(analytics?.categoryBreakdown) ? analytics.categoryBreakdown : [];
+
+  const safeOrders = Array.isArray(orders) ? orders : [];
+  const safeProducts = Array.isArray(products) ? products : [];
+  const safeInventory = Array.isArray(inventory) ? inventory : [];
+  const safeEnquiries = Array.isArray(enquiries) ? enquiries : [];
+  const safeCustomers = Array.isArray(customers) ? customers : [];
 
   // 100% Real dynamic calculations from active hooks and data stores
-  const totalRevenue = Number(kpis.totalRevenue || 0) || orders.reduce((sum, o) => sum + Number(o.totalAmount || o.total || 0), 0);
-  const totalOrdersCount = orders.length;
-  const pendingOrdersCount = orders.filter((o) =>
-    ['new', 'pending', 'processing'].includes(String(o.orderStatus || o.status || '').toLowerCase())
+  const totalRevenue = Number(kpis.totalRevenue || 0) || safeOrders.reduce((sum, o) => sum + Number(o?.totalAmount || o?.total || 0), 0);
+  const totalOrdersCount = safeOrders.length;
+  const pendingOrdersCount = safeOrders.filter((o) =>
+    o && ['new', 'pending', 'processing'].includes(String(o.orderStatus || o.status || '').toLowerCase())
   ).length;
-  const totalProductsCount = products.length;
-  const lowStockItems = inventory.filter((i) => i.isLowStock || i.isOutOfStock || (i.stock != null && i.lowStockThreshold != null && i.stock <= i.lowStockThreshold));
+  const totalProductsCount = safeProducts.length;
+  const lowStockItems = safeInventory.filter((i) => i && (i.isLowStock || i.isOutOfStock || (i.stock != null && i.lowStockThreshold != null && i.stock <= i.lowStockThreshold)));
   const displayLowStock = lowStockItems.slice(0, 4);
-  const recentOrders = orders.slice(0, 5);
-  const totalCustomersCount = customers.length;
-  const totalEnquiriesCount = enquiries.length;
+  const recentOrders = safeOrders.slice(0, 5);
+  const totalCustomersCount = safeCustomers.length;
+  const totalEnquiriesCount = safeEnquiries.length;
 
   // Real chart trajectory derived directly from analytics or real order transactions
   const revenueChartData = useMemo(() => {
@@ -152,30 +158,32 @@ export function DashboardPage() {
         orders: Number(d.orders || 0),
       }));
     }
-    if (orders.length > 0) {
+    if (safeOrders.length > 0) {
       const map = {};
-      orders.forEach((o) => {
+      safeOrders.forEach((o) => {
+        if (!o) return;
         const d = o.createdAt ? new Date(o.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : 'Recent';
         map[d] = (map[d] || 0) + Number(o.totalAmount || o.total || 0);
       });
       return Object.entries(map).map(([label, revenue]) => ({ label, revenue, orders: 1 }));
     }
     return [];
-  }, [rawRevenueOverview, orders]);
+  }, [rawRevenueOverview, safeOrders]);
 
   // Real category breakdown derived dynamically from live products catalog
   const categoryData = useMemo(() => {
     if (rawCategoryBreakdown && rawCategoryBreakdown.length > 0) {
       return rawCategoryBreakdown;
     }
-    if (!products || products.length === 0) return [];
+    if (!safeProducts || safeProducts.length === 0) return [];
     const catMap = {};
     const palette = ['#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#06b6d4', '#eab308'];
-    products.forEach((p) => {
+    safeProducts.forEach((p) => {
+      if (!p) return;
       const cat = p.category || 'General';
       catMap[cat] = (catMap[cat] || 0) + 1;
     });
-    const total = products.length;
+    const total = safeProducts.length;
     return Object.entries(catMap).map(([name, count], idx) => ({
       name,
       count,
@@ -183,7 +191,7 @@ export function DashboardPage() {
       color: palette[idx % palette.length],
       revenue: 0,
     }));
-  }, [rawCategoryBreakdown, products]);
+  }, [rawCategoryBreakdown, safeProducts]);
 
   // Quick Action Items
   const quickActions = [
@@ -933,53 +941,61 @@ export function DashboardPage() {
                 <p className="text-xs text-slate-500">Construction material distribution</p>
               </div>
               <span className="text-xs font-bold text-slate-700 bg-slate-100 px-2 py-0.5 rounded">
-                {effectiveCategoryData.length} {effectiveCategoryData.length === 1 ? 'Category' : 'Categories'}
+                {categoryData.length} {categoryData.length === 1 ? 'Category' : 'Categories'}
               </span>
             </div>
 
             {/* Donut Chart */}
-            <div className="h-44 w-full flex items-center justify-center relative">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={effectiveCategoryData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={48}
-                    outerRadius={70}
-                    paddingAngle={3}
-                    dataKey="value"
-                  >
-                    {effectiveCategoryData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={entry.color} />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(val, name, item) => [
-                      `${val}% (${formatCurrency(item.payload.revenue)})`,
-                      item.payload.name,
-                    ]}
-                    contentStyle={{
-                      backgroundColor: '#0f172a',
-                      borderRadius: '8px',
-                      color: '#fff',
-                      fontSize: '11px',
-                      border: 'none',
-                    }}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                <span className="text-[10px] text-slate-400 font-bold uppercase">Volume</span>
-                <span className="text-xs font-black text-slate-900">
-                  {formatCurrency(effectiveCategoryData.reduce((sum, c) => sum + (c.revenue || 0), 0))}
-                </span>
+            {categoryData.length === 0 ? (
+              <div className="h-44 w-full flex flex-col items-center justify-center text-slate-400 bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                <Boxes className="w-8 h-8 text-slate-300 mb-1" />
+                <span className="text-xs font-semibold text-slate-600">No catalog products yet</span>
+                <span className="text-[10.5px] text-slate-400">Categories will map automatically</span>
               </div>
-            </div>
+            ) : (
+              <div className="h-44 w-full flex items-center justify-center relative">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={categoryData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={48}
+                      outerRadius={70}
+                      paddingAngle={3}
+                      dataKey="value"
+                    >
+                      {categoryData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(val, name, item) => [
+                        `${val}% (${formatCurrency(item.payload.revenue)})`,
+                        item.payload.name,
+                      ]}
+                      contentStyle={{
+                        backgroundColor: '#0f172a',
+                        borderRadius: '8px',
+                        color: '#fff',
+                        fontSize: '11px',
+                        border: 'none',
+                      }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+                <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase">Volume</span>
+                  <span className="text-xs font-black text-slate-900">
+                    {formatCurrency(categoryData.reduce((sum, c) => sum + (c.revenue || 0), 0))}
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* Category Breakdown Progress Bars */}
             <div className="space-y-2 mt-2">
-              {effectiveCategoryData.slice(0, 5).map((cat, idx) => (
+              {categoryData.slice(0, 5).map((cat, idx) => (
                 <Link
                   key={idx}
                   to={`/seller/products?category=${encodeURIComponent(cat.name)}`}
