@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
-import { Home, Package, FileText, User } from 'lucide-react';
+import { Home, Package, FileText, BarChart2, User } from 'lucide-react';
 import { useOrders } from '../../hooks/useOrders';
 
 export function MobileBottomNav() {
@@ -30,6 +30,12 @@ export function MobileBottomNav() {
       icon: FileText,
       badge: pendingCount > 0,
       isActive: currentPath.startsWith('/seller/orders'),
+    },
+    {
+      label: 'Reports',
+      to: '/seller/analytics',
+      icon: BarChart2,
+      isActive: currentPath.startsWith('/seller/analytics'),
     },
     {
       label: 'Profile',
