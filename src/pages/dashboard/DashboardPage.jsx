@@ -48,6 +48,7 @@ import {
   Truck,
   FileCheck2,
   Tag,
+  LogOut,
 } from 'lucide-react';
 import { useSellerProfile } from '../../hooks/useSellerProfile';
 import { useAuthStore } from '../../store/authStore';
@@ -202,19 +203,34 @@ export function DashboardPage() {
       {/* ================= PHONE VIEW DASHBOARD (Matches Phone Screenshot 1 Exactly) ================= */}
       <div className="block md:hidden space-y-3.5 pb-2">
         {/* 1. Good Morning Card */}
-        <div className="bg-white rounded-xl p-4 shadow-2xs border border-slate-100 flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-full bg-[#EDF3F8] flex items-center justify-center shrink-0 border border-slate-200/70 text-slate-600">
-            <User className="w-6 h-6 text-slate-500" />
+        <div className="bg-white rounded-xl p-4 shadow-2xs border border-slate-100 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3.5 min-w-0">
+            <div className="w-12 h-12 rounded-full bg-[#EDF3F8] flex items-center justify-center shrink-0 border border-slate-200/70 text-slate-600">
+              <User className="w-6 h-6 text-slate-500" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs text-slate-500 font-medium leading-none">{getGreeting()},</p>
+              <h2 className="text-base font-bold text-slate-900 leading-snug mt-0.5 truncate">
+                {profile?.name || user?.name || 'Seller'}
+              </h2>
+              <p className="text-[11px] text-slate-400 leading-tight mt-0.5 truncate">
+                Manage your products, orders and grow
+              </p>
+            </div>
           </div>
-          <div className="min-w-0">
-            <p className="text-xs text-slate-500 font-medium leading-none">{getGreeting()},</p>
-            <h2 className="text-base font-bold text-slate-900 leading-snug mt-0.5 truncate">
-              {profile?.name || user?.name || 'Seller'}
-            </h2>
-            <p className="text-[11px] text-slate-400 leading-tight mt-0.5">
-              Manage your products, orders and grow with hinchmart
-            </p>
-          </div>
+
+          <button
+            type="button"
+            onClick={async () => {
+              await useAuthStore.getState().logout();
+              navigate('/login');
+            }}
+            title="Sign out of seller account"
+            className="p-2 text-rose-600 hover:bg-rose-50 active:bg-rose-100 rounded-lg border border-rose-100 bg-rose-50/40 shrink-0 flex items-center gap-1.5 text-xs font-bold transition-colors cursor-pointer"
+          >
+            <LogOut className="w-4 h-4 text-rose-600" />
+            <span>Logout</span>
+          </button>
         </div>
 
         {/* 2. 2x2 Metric Cards Grid (Exact match to Screen 1) */}

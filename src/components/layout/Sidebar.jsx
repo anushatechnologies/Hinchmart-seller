@@ -111,7 +111,7 @@ export function Sidebar() {
       {/* Mobile Drawer Backdrop */}
       {mobileMenuOpen && (
         <div
-          className="fixed inset-0 z-40 bg-slate-950/70 backdrop-blur-xs md:hidden"
+          className="fixed inset-0 z-[60] bg-slate-950/75 backdrop-blur-xs md:hidden"
           onClick={() => setMobileMenuOpen(false)}
         />
       )}
@@ -119,7 +119,7 @@ export function Sidebar() {
       {/* Sidebar Container */}
       <aside
         className={cn(
-          'fixed inset-y-0 left-0 z-40 flex flex-col h-screen max-h-screen bg-[#0B132B] text-slate-300 border-r border-slate-800/80 shadow-xl transition-all duration-300 ease-spring md:static shrink-0 select-none',
+          'fixed inset-y-0 left-0 z-[60] flex flex-col h-screen max-h-screen bg-[#0B132B] text-slate-300 border-r border-slate-800/80 shadow-2xl transition-all duration-300 ease-spring md:static shrink-0 select-none md:z-30',
           // Desktop collapsible width
           sidebarOpen ? 'w-64' : 'w-20',
           // Mobile slide-in
@@ -142,18 +142,32 @@ export function Sidebar() {
           </div>
 
           {/* User Profile Bar */}
-          <div className="p-4 flex items-center gap-3 border-b border-slate-800/60">
-            <div className="w-11 h-11 rounded-full bg-slate-700/80 text-white flex items-center justify-center shrink-0 border border-slate-600/50">
-              <User className="w-5 h-5 text-slate-300" />
+          <div className="p-4 flex items-center justify-between border-b border-slate-800/60">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="w-11 h-11 rounded-full bg-slate-700/80 text-white flex items-center justify-center shrink-0 border border-slate-600/50">
+                <User className="w-5 h-5 text-slate-300" />
+              </div>
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-white truncate">
+                  {profile?.name || user?.name || 'Seller'}
+                </h3>
+                <p className="text-[11px] text-blue-200/60 truncate">
+                  {user?.email || profile?.email || ''}
+                </p>
+              </div>
             </div>
-            <div className="min-w-0">
-              <h3 className="text-sm font-bold text-white truncate">
-                {profile?.name || user?.name || 'Seller'}
-              </h3>
-              <p className="text-[11px] text-blue-200/60 truncate">
-                {user?.email || profile?.email || ''}
-              </p>
-            </div>
+            <button
+              type="button"
+              onClick={async () => {
+                setMobileMenuOpen(false);
+                await useAuthStore.getState().logout();
+                window.location.href = '/login';
+              }}
+              title="Quick Logout"
+              className="p-2 text-rose-400 hover:text-white hover:bg-rose-500/20 rounded-lg transition-colors cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
           </div>
 
           {/* Navigation Links matching Screen 2 */}
@@ -198,10 +212,8 @@ export function Sidebar() {
                 </NavLink>
               );
             })}
-          </div>
 
-          {/* Bottom Logout */}
-          <div className="p-4 border-t border-slate-800/60 bg-[#08152B]">
+            {/* Direct Logout in Mobile Menu Items */}
             <button
               type="button"
               onClick={async () => {
@@ -209,10 +221,26 @@ export function Sidebar() {
                 await useAuthStore.getState().logout();
                 window.location.href = '/login';
               }}
-              className="flex items-center gap-2.5 text-xs font-bold text-red-500 hover:text-red-400 transition-colors w-full py-1 cursor-pointer"
+              className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-rose-300 hover:text-white hover:bg-rose-500/20 transition-all w-full cursor-pointer mt-2"
+            >
+              <LogOut className="w-4 h-4 text-rose-400" />
+              <span>Logout</span>
+            </button>
+          </div>
+
+          {/* Bottom Logout Button */}
+          <div className="p-4 pb-8 border-t border-slate-800/60 bg-[#08152B] shrink-0">
+            <button
+              type="button"
+              onClick={async () => {
+                setMobileMenuOpen(false);
+                await useAuthStore.getState().logout();
+                window.location.href = '/login';
+              }}
+              className="flex items-center justify-center gap-2.5 text-xs font-bold text-white bg-rose-600 hover:bg-rose-700 active:bg-rose-800 rounded-xl py-3 px-4 w-full shadow-md transition-colors cursor-pointer"
             >
               <LogOut className="w-4 h-4" />
-              <span>Logout</span>
+              <span>Logout of Session</span>
             </button>
           </div>
         </div>

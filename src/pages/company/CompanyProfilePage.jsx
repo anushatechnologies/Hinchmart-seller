@@ -21,8 +21,10 @@ import {
   Bell,
   HelpCircle,
   ChevronRight,
+  LogOut,
 } from 'lucide-react';
 import { useSellerProfile } from '../../hooks/useSellerProfile';
+import { useAuthStore } from '../../store/authStore';
 import { StatusBadge } from '../../components/common/Badge';
 import { Button } from '../../components/common/Button';
 import { Skeleton } from '../../components/common/Skeleton';
@@ -125,6 +127,21 @@ export function CompanyProfilePage() {
               </Link>
             );
           })}
+
+          <button
+            type="button"
+            onClick={async () => {
+              await useAuthStore.getState().logout();
+              window.location.href = '/login';
+            }}
+            className="w-full p-3.5 flex items-center justify-between hover:bg-rose-50/80 transition-colors text-left cursor-pointer group"
+          >
+            <div className="flex items-center gap-3">
+              <LogOut className="w-4 h-4 text-rose-600 group-hover:scale-110 transition-transform" />
+              <span className="text-xs font-bold text-rose-600">Logout of Account</span>
+            </div>
+            <ChevronRight className="w-4 h-4 text-rose-400" />
+          </button>
         </div>
 
         {/* Company Overview & Metrics Card */}
@@ -247,6 +264,21 @@ export function CompanyProfilePage() {
               </span>
             ))}
           </div>
+        </div>
+
+        {/* Mobile Logout Button Card */}
+        <div className="pt-1">
+          <button
+            type="button"
+            onClick={async () => {
+              await useAuthStore.getState().logout();
+              window.location.href = '/login';
+            }}
+            className="w-full py-3.5 px-4 bg-white border border-rose-200 hover:bg-rose-50 text-rose-600 font-bold text-xs rounded-2xl shadow-2xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+          >
+            <LogOut className="w-4 h-4 text-rose-600" />
+            <span>Logout of Seller Account</span>
+          </button>
         </div>
       </div>
 
