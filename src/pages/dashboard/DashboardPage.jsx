@@ -199,280 +199,111 @@ export function DashboardPage() {
 
   return (
     <>
-      {/* ================= PHONE VIEW DASHBOARD (Matches Phone Screenshot 1 Exactly) ================= */}
-      {/* ================= PHONE VIEW DASHBOARD (Matches Phone Screenshot 1 Exactly) ================= */}
-      <div className="block md:hidden space-y-3.5 pb-2">
-        {/* 1. Good Morning Card */}
-        <div className="bg-white rounded-xl p-4 shadow-2xs border border-slate-100 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3.5 min-w-0">
-            <div className="w-12 h-12 rounded-full bg-[#EDF3F8] flex items-center justify-center shrink-0 border border-slate-200/70 text-slate-600">
-              <User className="w-6 h-6 text-slate-500" />
-            </div>
-            <div className="min-w-0">
-              <p className="text-xs text-slate-500 font-medium leading-none">{getGreeting()},</p>
-              <h2 className="text-base font-bold text-slate-900 leading-snug mt-0.5 truncate">
-                {profile?.name || user?.name || 'Seller'}
-              </h2>
-              <p className="text-[11px] text-slate-400 leading-tight mt-0.5 truncate">
-                Manage your products, orders and grow
+      <div className="space-y-4 sm:space-y-6 max-w-7xl mx-auto pb-6">
+        {/* 1. TOP HEADER: Business Control Center Banner with Glassmorphism Effect */}
+        <div className="relative overflow-hidden bg-gradient-to-br from-white/95 via-slate-50/90 to-emerald-50/50 rounded-2xl p-4 sm:p-6 lg:p-7 shadow-sm shadow-emerald-950/5 border border-slate-200/90 backdrop-blur-xl">
+          {/* Ambient Aurora Glow Orbs */}
+          <div className="absolute -top-20 -right-20 w-80 h-80 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute -bottom-20 -left-20 w-80 h-80 bg-orange-500/10 rounded-full blur-3xl pointer-events-none" />
+          <div className="absolute top-1/2 left-1/3 w-64 h-64 bg-teal-400/10 rounded-full blur-2xl pointer-events-none" />
+          <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-500/20 to-transparent" />
+
+          <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4 sm:gap-5">
+            <div>
+              <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-2 sm:mb-2.5">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-black bg-gradient-to-r from-orange-500 to-amber-500 text-white uppercase tracking-wider shadow-xs">
+                  Seller Hub
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold bg-emerald-500/10 text-emerald-800 border border-emerald-500/25 inline-flex items-center gap-1 backdrop-blur-xs">
+                  <ShieldCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-600" /> GST Verified Enterprise
+                </span>
+                <span className="text-slate-500 text-xs items-center gap-1.5 font-medium inline-flex bg-white/80 border border-slate-200/80 px-2.5 py-0.5 rounded-full shadow-2xs">
+                  <Calendar className="w-3.5 h-3.5 text-slate-400" /> {new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
+                </span>
+              </div>
+
+              <h1 className="text-xl sm:text-3xl font-extrabold tracking-tight flex flex-wrap items-center gap-1.5 sm:gap-2">
+                <span className="text-slate-800 font-extrabold">
+                  {getGreeting()},
+                </span>
+                <span className="bg-gradient-to-r from-emerald-600 via-teal-500 to-orange-500 bg-clip-text text-transparent animate-text-gradient font-black">
+                  {profile?.name || profile?.fullName || user?.name || user?.fullName || 'Authorized Seller'}
+                </span>
+                <span className="animate-wave inline-block text-xl sm:text-3xl select-none" role="img" aria-label="waving hand">
+                  👋
+                </span>
+              </h1>
+
+              <p className="text-xs sm:text-sm text-slate-600 mt-1 sm:mt-2 max-w-2xl font-normal leading-relaxed flex flex-wrap items-center gap-1.5">
+                <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200/80 font-bold shadow-2xs">
+                  {profile?.companyName || user?.companyName || 'Registered Enterprise'}
+                </span>
+                <span className="text-slate-400 hidden sm:inline">•</span>
+                <span className="text-slate-500">Live overview of sales volume, material orders, customer RFQs, and warehouse stock levels.</span>
               </p>
             </div>
-          </div>
 
-          <button
-            type="button"
-            onClick={async () => {
-              await useAuthStore.getState().logout();
-              navigate('/login');
-            }}
-            title="Sign out of seller account"
-            className="p-2 text-rose-600 hover:bg-rose-50 active:bg-rose-100 rounded-lg border border-rose-100 bg-rose-50/40 shrink-0 flex items-center gap-1.5 text-xs font-bold transition-colors cursor-pointer"
-          >
-            <LogOut className="w-4 h-4 text-rose-600" />
-            <span>Logout</span>
-          </button>
+            {/* Quick Header Actions */}
+            <div className="flex items-center gap-2 shrink-0 pt-1 lg:pt-0">
+              <Link to="/seller/products/add" className="flex-1 sm:flex-initial">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  leftIcon={Plus}
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm shadow-emerald-600/20 hover:shadow-md transition-all rounded-xl text-xs sm:text-sm"
+                >
+                  Add Product
+                </Button>
+              </Link>
+
+              <Link to="/seller/quotations/create" className="flex-1 sm:flex-initial">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  leftIcon={FileText}
+                  className="w-full bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 hover:border-slate-300 font-semibold shadow-2xs hover:shadow-xs transition-all rounded-xl text-xs sm:text-sm"
+                >
+                  New Quotation
+                </Button>
+              </Link>
+
+              <Link to="/seller/products/labels" className="hidden sm:inline-flex">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  leftIcon={QrCode}
+                  className="bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 hover:border-slate-300 font-semibold shadow-2xs hover:shadow-xs transition-all rounded-xl text-xs sm:text-sm"
+                >
+                  Create Label
+                </Button>
+              </Link>
+            </div>
+          </div>
         </div>
 
-        {/* 2. 2x2 Metric Cards Grid (Exact match to Screen 1) */}
-        <div className="grid grid-cols-2 gap-2.5">
-          {/* Total Products */}
-          <Link
-            to="/seller/products"
-            className="bg-white rounded-xl p-3.5 border border-slate-100 shadow-2xs block hover:border-blue-200 transition-all"
-          >
-            <div className="w-8 h-8 rounded-lg bg-[#EBF3FE] text-[#1D64ED] flex items-center justify-center mb-2">
-              <Package className="w-4 h-4" />
-            </div>
-            <p className="text-[11px] text-slate-500 font-medium">Total Products</p>
-            <p className="text-xl font-bold text-slate-900 mt-0.5">{products.length}</p>
-          </Link>
-
-          {/* Pending Orders */}
-          <Link
-            to="/seller/orders?status=pending"
-            className="bg-white rounded-xl p-3.5 border border-slate-100 shadow-2xs block hover:border-rose-200 transition-all"
-          >
-            <div className="w-8 h-8 rounded-lg bg-[#FEECEC] text-[#F43F5E] flex items-center justify-center mb-2">
-              <ShoppingCart className="w-4 h-4" />
-            </div>
-            <p className="text-[11px] text-slate-500 font-medium">Pending Orders</p>
-            <p className="text-xl font-bold text-slate-900 mt-0.5">
-              {orders.filter((o) => ['new', 'pending'].includes(String(o.orderStatus || o.status || '').toLowerCase())).length}
-            </p>
-          </Link>
-
-          {/* Low Stock */}
-          <Link
-            to="/seller/inventory/low-stock"
-            className="bg-white rounded-xl p-3.5 border border-slate-100 shadow-2xs block hover:border-amber-200 transition-all"
-          >
-            <div className="w-8 h-8 rounded-lg bg-[#FFF4E6] text-[#F59E0B] flex items-center justify-center mb-2">
-              <AlertTriangle className="w-4 h-4" />
-            </div>
-            <p className="text-[11px] text-slate-500 font-medium">Low Stock</p>
-            <p className="text-xl font-bold text-slate-900 mt-0.5">{lowStockItems.length}</p>
-          </Link>
-
-          {/* Revenue */}
-          <Link
-            to="/seller/payments"
-            className="bg-white rounded-xl p-3.5 border border-slate-100 shadow-2xs block hover:border-emerald-200 transition-all"
-          >
-            <div className="w-8 h-8 rounded-lg bg-[#ECFDF5] text-[#10B981] flex items-center justify-center mb-2">
-              <TrendingUp className="w-4 h-4" />
-            </div>
-            <p className="text-[11px] text-slate-500 font-medium">Revenue</p>
-            <p className="text-xl font-bold text-slate-900 mt-0.5 truncate">
-              {formatCurrency(kpis?.totalRevenue || 0)}
-            </p>
-          </Link>
-        </div>
-
-        {/* 3. Sales Overview Card */}
-        <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-2xs">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-slate-900">Sales Overview</h3>
-            <div className="relative">
-              <select className="text-xs bg-white border border-slate-200 text-slate-600 py-1 px-2.5 rounded-lg focus:outline-none appearance-none pr-6 cursor-pointer shadow-2xs">
-                <option>This Month</option>
-                <option>Last 30 Days</option>
-                <option>This Year</option>
-              </select>
-              <ChevronRight className="w-3 h-3 text-slate-400 absolute right-2 top-2.5 pointer-events-none rotate-90" />
-            </div>
-          </div>
-
-          <div className="mt-2.5 flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-slate-900 tracking-tight">
-              {formatCurrency(kpis?.totalRevenue || 0)}
-            </span>
-            <span className="text-[11px] font-semibold bg-[#ECFDF5] text-emerald-600 px-2 py-0.5 rounded-full inline-flex items-center gap-0.5">
-              <TrendingUp className="w-3 h-3" />
-              {kpis?.revenueGrowth != null ? `${kpis.revenueGrowth >= 0 ? '+' : ''}${kpis.revenueGrowth}%` : '+0%'}
-            </span>
-          </div>
-
-          {/* Smooth Blue Gradient Chart */}
-          <div className="h-36 w-full mt-2">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart
-                data={
-                  revenueData && revenueData.length > 0
-                    ? revenueData.map((d) => ({
-                        date: d.month || d.date || '',
-                        value: Number(d.revenue || 0),
-                      }))
-                    : [
-                        { date: '1 Oct', value: 0 },
-                        { date: '31 Oct', value: 0 },
-                      ]
-                }
-                margin={{ top: 10, right: 10, left: -25, bottom: 0 }}
+        {/* 1.5 QUICK ACTIONS LAUNCHPAD (Visible on both phone and desktop) */}
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 sm:gap-3">
+          {quickActions.map((qa) => {
+            const Icon = qa.icon;
+            return (
+              <Link
+                key={qa.title}
+                to={qa.link}
+                className="bg-white hover:bg-slate-50 border border-slate-200/90 hover:border-slate-300 rounded-xl p-2.5 sm:p-3 shadow-2xs hover:shadow-xs transition-all flex flex-col items-center text-center group cursor-pointer"
               >
-                <defs>
-                  <linearGradient id="mobileSalesGradient" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#2563eb" stopOpacity={0.25} />
-                    <stop offset="95%" stopColor="#2563eb" stopOpacity={0.0} />
-                  </linearGradient>
-                </defs>
-                <XAxis
-                  dataKey="date"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{ fontSize: 9.5, fill: '#94a3b8' }}
-                />
-                <Tooltip
-                  formatter={(val) => [`₹${val.toLocaleString('en-IN')}`, 'Sales']}
-                  contentStyle={{ borderRadius: '8px', fontSize: '11px', border: '1px solid #e2e8f0' }}
-                />
-                <Area
-                  type="monotone"
-                  dataKey="value"
-                  stroke="#2563eb"
-                  strokeWidth={2.5}
-                  fillOpacity={1}
-                  fill="url(#mobileSalesGradient)"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
-
-        {/* 4. Recent Activity (Directly below Sales Overview in Screen 1) */}
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-bold text-slate-900">Recent Activity</h3>
-            <Link to="/seller/orders" className="text-xs font-semibold text-[#1D64ED] hover:underline">
-              View All
-            </Link>
-          </div>
-
-          {recentOrders.length > 0 ? (
-            <Link
-              to={`/seller/orders/${recentOrders[0].id || recentOrders[0].orderNumber}`}
-              className="bg-white rounded-xl p-3 border border-slate-100 shadow-2xs flex items-center justify-between gap-3 hover:bg-slate-50/50 transition-colors"
-            >
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-[#ECFDF5] text-[#059669] flex items-center justify-center shrink-0">
-                  <ShoppingCart className="w-4 h-4" />
+                <div className={`w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center mb-1.5 transition-transform group-hover:scale-110 ${qa.color}`}>
+                  <Icon className="w-4 h-4" />
                 </div>
-                <div>
-                  <p className="text-xs font-bold text-slate-800">
-                    Order #{recentOrders[0].orderNumber || recentOrders[0].id}
-                  </p>
-                  <p className="text-[11px] text-slate-400 mt-0.5">
-                    {recentOrders[0].buyer?.company || recentOrders[0].buyer?.name || 'Customer Order'}
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-1">
-                <span className="text-[10px] text-slate-400 font-medium">
-                  {formatDate(recentOrders[0].createdAt) || 'Recent'}
+                <span className="text-[11px] sm:text-xs font-bold text-slate-800 group-hover:text-slate-900 truncate w-full">
+                  {qa.title}
                 </span>
-                <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
-              </div>
-            </Link>
-          ) : (
-            <div className="bg-white rounded-xl p-6 border border-slate-100 text-center">
-              <ShoppingCart className="w-7 h-7 text-slate-300 mx-auto mb-1.5" />
-              <p className="text-xs font-semibold text-slate-700">No recent orders</p>
-              <p className="text-[11px] text-slate-400 mt-0.5">New orders will appear here automatically</p>
-            </div>
-          )}
+                <span className="text-[10px] text-slate-400 hidden sm:inline truncate w-full">
+                  {qa.badge}
+                </span>
+              </Link>
+            );
+          })}
         </div>
-      </div>
-
-      {/* ================= LAPTOP / DESKTOP DASHBOARD (100% Unchanged) ================= */}
-      <div className="hidden md:block space-y-6">
-        {/* 1. TOP HEADER: Business Control Center Banner with Glassmorphism Effect */}
-        <div className="relative overflow-hidden bg-gradient-to-br from-white/95 via-slate-50/90 to-emerald-50/50 rounded-xl sm:rounded-2xl p-4 sm:p-7 shadow-sm shadow-emerald-950/5 border border-slate-200/90 backdrop-blur-xl">
-        {/* Ambient Aurora Glow Orbs */}
-        <div className="absolute -top-20 -right-20 w-80 h-80 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute -bottom-20 -left-20 w-80 h-80 bg-orange-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute top-1/2 left-1/3 w-64 h-64 bg-teal-400/10 rounded-full blur-2xl pointer-events-none" />
-        <div className="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-emerald-500/20 to-transparent" />
-
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4 sm:gap-5">
-          <div>
-            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-2 sm:mb-2.5">
-              <span className="px-2 sm:px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-black bg-gradient-to-r from-orange-500 to-amber-500 text-white uppercase tracking-wider shadow-xs">
-                Control Center
-              </span>
-              <span className="px-2 sm:px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-bold bg-emerald-500/10 text-emerald-800 border border-emerald-500/25 inline-flex items-center gap-1 backdrop-blur-xs">
-                <ShieldCheck className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-600" /> GST & Enterprise Verified
-              </span>
-              <span className="text-slate-500 text-xs items-center gap-1.5 font-medium hidden sm:inline-flex bg-white/80 border border-slate-200/80 px-2.5 py-0.5 rounded-full shadow-2xs">
-                <Calendar className="w-3.5 h-3.5 text-slate-400" /> {new Date().toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' })}
-              </span>
-            </div>
-
-            <h1 className="text-xl sm:text-3xl font-extrabold tracking-tight flex flex-wrap items-center gap-1.5 sm:gap-2">
-              <span className="text-slate-800 font-extrabold">
-                {getGreeting()},
-              </span>
-              <span className="bg-gradient-to-r from-emerald-600 via-teal-500 to-orange-500 bg-clip-text text-transparent animate-text-gradient font-black">
-                {profile?.name || profile?.fullName || user?.name || user?.fullName || 'Authorized Seller'}
-              </span>
-              <span className="animate-wave inline-block text-xl sm:text-3xl select-none" role="img" aria-label="waving hand">
-                👋
-              </span>
-            </h1>
-
-            <p className="text-xs sm:text-sm text-slate-600 mt-1 sm:mt-2 max-w-2xl font-normal leading-relaxed flex flex-wrap items-center gap-1.5">
-              <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200/80 font-bold shadow-2xs">
-                {profile?.companyName || user?.companyName || 'Registered Enterprise'}
-              </span>
-              <span className="text-slate-400 hidden sm:inline">•</span>
-              <span className="hidden sm:inline">Real-time overview of sales volume, material orders, customer RFQs, and warehouse stock levels.</span>
-            </p>
-          </div>
-
-          {/* Quick Header Actions */}
-          <div className="flex items-center gap-2 shrink-0 pt-1 lg:pt-0">
-            <Link to="/seller/quotations/create" className="flex-1 sm:flex-initial">
-              <Button
-                variant="primary"
-                size="sm"
-                leftIcon={FileText}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-sm shadow-emerald-600/20 hover:shadow-md transition-all rounded-lg sm:rounded-xl text-xs sm:text-sm"
-              >
-                New Quotation
-              </Button>
-            </Link>
-
-            <Link to="/seller/products/labels" className="flex-1 sm:flex-initial">
-              <Button
-                variant="secondary"
-                size="sm"
-                leftIcon={QrCode}
-                className="w-full bg-white hover:bg-slate-50 text-slate-700 border border-slate-200/90 hover:border-slate-300 font-semibold shadow-2xs hover:shadow-xs transition-all rounded-lg sm:rounded-xl text-xs sm:text-sm"
-              >
-                Create Label
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </div>
 
       {/* 2. TOP KPI METRIC CARDS (6 Business Performance Cards - 2 Columns on Mobile, 6 on Desktop) */}
       <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-2.5 sm:gap-4">
@@ -1019,7 +850,49 @@ export function DashboardPage() {
               </Link>
             </div>
 
-            <div className="overflow-x-auto">
+            {/* Mobile Touch Card View */}
+            <div className="sm:hidden space-y-2.5">
+              {recentOrders.length === 0 ? (
+                <div className="py-6 text-center text-slate-400 text-xs">
+                  No orders received yet. New purchase orders will appear here.
+                </div>
+              ) : (
+                recentOrders.map((order) => (
+                  <div
+                    key={order.id}
+                    onClick={() => navigate(`/seller/orders/${order.id}`, { state: { from: location } })}
+                    className="p-3 bg-slate-50/70 hover:bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-between gap-2 cursor-pointer transition-colors"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono font-bold text-slate-900 text-xs">
+                          {order.orderNumber}
+                        </span>
+                        <StatusBadge status={order.orderStatus} />
+                      </div>
+                      <p className="font-bold text-slate-800 text-xs truncate mt-0.5">
+                        {order.buyer?.company || 'Contractor Enterprise'}
+                      </p>
+                      <p className="text-[10px] text-slate-400 mt-0.5 truncate">
+                        {formatDate(order.createdAt)} • {order.items?.[0]?.name}
+                      </p>
+                    </div>
+
+                    <div className="text-right shrink-0">
+                      <span className="font-extrabold text-slate-900 text-xs block">
+                        {formatCurrency(order.totalAmount)}
+                      </span>
+                      <span className="text-[10px] font-bold text-amber-600 flex items-center justify-end gap-0.5 mt-0.5">
+                        View <ChevronRight className="w-3 h-3" />
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Desktop Table View */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-slate-200 text-slate-500 font-bold uppercase tracking-wider bg-slate-50/70">
