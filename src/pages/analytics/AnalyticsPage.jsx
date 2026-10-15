@@ -29,6 +29,9 @@ import {
 } from 'lucide-react';
 import { useAnalytics } from '../../hooks/useAnalytics';
 import { useProducts } from '../../hooks/useProducts';
+import { useOrders } from '../../hooks/useOrders';
+import { useEnquiries } from '../../hooks/useEnquiries';
+import { useCustomers } from '../../hooks/useCustomers';
 import { StatsCard, ChartCard } from '../../components/common/StatsCard';
 import { Button } from '../../components/common/Button';
 import { exportToCsv } from '../../utils/exportUtils';
@@ -37,64 +40,91 @@ import { formatCurrency, formatNumber } from '../../utils/formatters';
 export function AnalyticsPage() {
   const [timeRange, setTimeRange] = useState('30d');
   const { analytics, isLoading } = useAnalytics(timeRange);
-  const { products } = useProducts();
+  const { products = [] } = useProducts();
+  const { orders = [] } = useOrders();
+  const { enquiries = [] } = useEnquiries();
+  const { customers = [] } = useCustomers();
 
   const kpis = analytics?.kpis || {};
-  const effectiveRevenue = kpis.totalRevenue > 0 ? kpis.totalRevenue : 84500;
-  const effectiveOrders = kpis.totalOrders > 0 ? kpis.totalOrders : 56;
+  const effectiveRevenue = Number(kpis.totalRevenue) || orders.reduce((sum, o) => sum + Number(o.totalAmount || o.total || 0), 0);
+  const effectiveOrders = Number(kpis.totalOrders) || orders.length;
 
-  const effectiveRevenueData = analytics?.revenueOverview?.length > 0
-    ? analytics.revenueOverview
-    : [
-        { month: '1 Oct', date: '1 Oct', revenue: 35000, orders: 12, enquiries: 4 },
-        { month: '7 Oct', date: '7 Oct', revenue: 48000, orders: 18, enquiries: 6 },
-        { month: '14 Oct', date: '14 Oct', revenue: 42000, orders: 15, enquiries: 5 },
-        { month: '21 Oct', date: '21 Oct', revenue: 68000, orders: 25, enquiries: 8 },
-        { month: '31 Oct', date: '31 Oct', revenue: 84500, orders: 32, enquiries: 11 },
-      ];
+  const effectiveRevenueData = useMemo(() => {
+    if (analytics?.revenueOverview && analytics.revenueOverview.length > 0) {
+      return analytics.revenueOverview;
+    }
+    if (orders.length > 0) {
+      const map = {};
+      orders.forEach((o) => {
+        const d = o.createdAt ? new Date(o.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : 'Recent';
+        if (!map[d]) {
+          map[d] = { month: d, date: d, revenue: 0, orders: 0, enquiries: 0 };
+        }
+        map[d].revenue += Number(o.totalAmount || o.total || 0);
+        map[d].orders += 1;
+      });
+      return Object.values(map);
+    }
+    return [];
+  }, [analytics?.revenueOverview, orders]);
 
-  const effectiveCategoryData = analytics?.categoryBreakdown?.length > 0
-    ? analytics.categoryBreakdown
-    : [
-        { name: 'Steel & Rebars (TMT)', value: 42, revenue: 35490, color: '#f59e0b' },
-        { name: 'Cement & Concrete', value: 28, revenue: 23660, color: '#10b981' },
-        { name: 'Bricks & Aggregates', value: 18, revenue: 15210, color: '#3b82f6' },
-        { name: 'Pipes & Sanitary', value: 12, revenue: 10140, color: '#8b5cf6' },
-      ];
+  const effectiveCategoryData = useMemo(() => {
+    if (analytics?.categoryBreakdown && analytics.categoryBreakdown.length > 0) {
+      return analytics.categoryBreakdown;
+    }
+    if (!products || products.length === 0) return [];
+    const catMap = {};
+    const palette = ['#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#06b6d4'];
+    products.forEach((p) => {
+      const cat = p.category || 'General';
+      catMap[cat] = (catMap[cat] || 0) + 1;
+    });
+    const total = products.length;
+    return Object.entries(catMap).map(([name, count], idx) => ({
+      name,
+      value: Math.round((count / total) * 100),
+      revenue: 0,
+      color: palette[idx % palette.length],
+    }));
+  }, [analytics?.categoryBreakdown, products]);
 
-  const effectiveFunnelData = analytics?.conversionFunnel?.length > 0
-    ? analytics.conversionFunnel
-    : [
-        { stage: 'Product Views', count: 1420 },
-        { stage: 'RFQs Submitted', count: 284 },
-        { stage: 'Quotes Prepared', count: 168 },
-        { stage: 'Purchase Orders', count: 56 },
-      ];
+  const effectiveFunnelData = useMemo(() => {
+    if (analytics?.conversionFunnel && analytics.conversionFunnel.length > 0) {
+      return analytics.conversionFunnel;
+    }
+    return [
+      { stage: 'Catalog Products', count: products.length },
+      { stage: 'Inquiries / RFQs', count: enquiries.length },
+      { stage: 'Purchase Orders', count: orders.length },
+    ];
+  }, [analytics?.conversionFunnel, products.length, enquiries.length, orders.length]);
 
   const handleExport = () => {
     const exportRows = effectiveRevenueData.map((r) => ({
-      Period: r.month,
-      GrossRevenue: r.revenue,
-      OrdersCompleted: r.orders,
-      RFQsReceived: r.enquiries,
+      Period: r.month || r.date || '',
+      GrossRevenue: r.revenue || 0,
+      OrdersCompleted: r.orders || 0,
+      RFQsReceived: r.enquiries || 0,
     }));
     exportToCsv('HinchMart_Commercial_Analytics_Report', exportRows);
   };
 
-  const topMaterials = products.length > 0
-    ? [...products].sort((a, b) => (b.totalSales || 0) - (a.totalSales || 0)).slice(0, 5)
-    : [
-        { id: '1', name: 'UltraTech Cement 50kg', totalSales: 350, price: 420, revenue: 147000 },
-        { id: '2', name: 'TMT Steel Rod 12mm', totalSales: 1200, price: 72, revenue: 86400 },
-        { id: '3', name: 'PVC Pipe 4 inch', totalSales: 45, price: 180, revenue: 8100 },
-      ];
+  const topMaterials = useMemo(() => {
+    if (!products || products.length === 0) return [];
+    return [...products]
+      .sort((a, b) => (Number(b.totalSales || b.salesCount || 0)) - (Number(a.totalSales || a.salesCount || 0)))
+      .slice(0, 5);
+  }, [products]);
 
   const mobileChartData = useMemo(() => {
-    return effectiveRevenueData.map((r) => ({
-      date: r.month || r.date || '',
-      value: Number(r.revenue || 0),
-    }));
-  }, [effectiveRevenueData]);
+    if (effectiveRevenueData.length > 0) {
+      return effectiveRevenueData.map((r) => ({
+        date: r.month || r.date || '',
+        value: Number(r.revenue || 0),
+      }));
+    }
+    return [{ date: 'Today', value: effectiveRevenue }];
+  }, [effectiveRevenueData, effectiveRevenue]);
 
   return (
     <>
@@ -123,10 +153,16 @@ export function AnalyticsPage() {
             <span className="text-2xl font-bold text-slate-900 tracking-tight">
               {formatCurrency(effectiveRevenue)}
             </span>
-            <span className="text-[11px] font-semibold bg-[#ECFDF5] text-emerald-600 px-2 py-0.5 rounded-full inline-flex items-center gap-0.5">
-              <TrendingUp className="w-3 h-3" />
-              {kpis.revenueGrowth != null ? `${kpis.revenueGrowth >= 0 ? '+' : ''}${kpis.revenueGrowth}%` : '+12.5%'}
-            </span>
+            {kpis.revenueGrowth != null ? (
+              <span className="text-[11px] font-semibold bg-[#ECFDF5] text-emerald-600 px-2 py-0.5 rounded-full inline-flex items-center gap-0.5">
+                <TrendingUp className="w-3 h-3" />
+                {`${kpis.revenueGrowth >= 0 ? '+' : ''}${kpis.revenueGrowth}%`}
+              </span>
+            ) : (
+              <span className="text-[11px] font-semibold bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full inline-flex items-center gap-0.5">
+                Live Sales
+              </span>
+            )}
           </div>
 
           {/* Smooth Blue Gradient Chart */}
@@ -172,12 +208,12 @@ export function AnalyticsPage() {
             <p className="text-[10px] text-slate-500 font-medium mt-0.5">Total Orders</p>
           </div>
           <div className="bg-white rounded-xl p-3 border border-slate-100 shadow-2xs text-center">
-            <p className="text-lg font-bold text-slate-900">{products.length || 128}</p>
+            <p className="text-lg font-bold text-slate-900">{products.length}</p>
             <p className="text-[10px] text-slate-500 font-medium mt-0.5">Total Products</p>
           </div>
           <div className="bg-white rounded-xl p-3 border border-slate-100 shadow-2xs text-center">
-            <p className="text-lg font-bold text-slate-900">{kpis.newCustomers ?? kpis.totalCustomers ?? 34}</p>
-            <p className="text-[10px] text-slate-500 font-medium mt-0.5">New Customers</p>
+            <p className="text-lg font-bold text-slate-900">{kpis.newCustomers ?? kpis.totalCustomers ?? customers.length}</p>
+            <p className="text-[10px] text-slate-500 font-medium mt-0.5">Total Customers</p>
           </div>
         </div>
       </div>
@@ -232,20 +268,20 @@ export function AnalyticsPage() {
           value={effectiveOrders}
           icon={ShoppingCart}
           color="blue"
-          subtext={`Avg Order Value: ${formatCurrency(kpis.averageOrderValue || Math.round(effectiveRevenue / (effectiveOrders || 1)))}`}
+          subtext={`Avg Order Value: ${formatCurrency(kpis.averageOrderValue || (effectiveOrders > 0 ? Math.round(effectiveRevenue / effectiveOrders) : 0))}`}
         />
 
         <StatsCard
           title="RFQ-to-Order Conversion Rate"
-          value={`${kpis.conversionRate || 14.8}%`}
+          value={`${kpis.conversionRate != null ? kpis.conversionRate : (enquiries.length > 0 ? ((orders.length / enquiries.length) * 100).toFixed(1) : 0)}%`}
           icon={Percent}
           color="amber"
-          subtext="Industry Benchmark: 35%"
+          subtext={enquiries.length > 0 ? `From ${enquiries.length} inquiries` : 'Live conversion rate'}
         />
 
         <StatsCard
           title="Unique Material Inquiries"
-          value={kpis.totalEnquiries || 28}
+          value={kpis.totalEnquiries != null ? kpis.totalEnquiries : enquiries.length}
           icon={HelpCircle}
           color="purple"
         />
@@ -410,25 +446,38 @@ export function AnalyticsPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 font-medium">
-                {topMaterials.map((m) => (
-                  <tr key={m.id} className="hover:bg-slate-50">
-                    <td className="py-2.5 px-3">
-                      <span className="font-bold text-slate-900 block truncate max-w-[200px]">
-                        {m.name}
-                      </span>
-                      <span className="text-[10px] text-slate-400 font-mono">{m.sku}</span>
-                    </td>
-                    <td className="py-2.5 px-3">
-                      {formatCurrency(m.sellingPrice)} / {m.unit}
-                    </td>
-                    <td className="py-2.5 px-3 font-bold text-slate-800">
-                      {formatNumber(m.totalSales || 1200)} {m.unit}
-                    </td>
-                    <td className="py-2.5 px-3 text-right font-extrabold text-emerald-600">
-                      {formatCurrency((m.totalSales || 1200) * m.sellingPrice)}
+                {topMaterials.length > 0 ? (
+                  topMaterials.map((m) => {
+                    const unitsSold = Number(m.totalSales || m.salesCount || 0);
+                    const unitPrice = Number(m.sellingPrice || m.price || 0);
+                    const turnover = unitsSold * unitPrice;
+                    return (
+                      <tr key={m.id} className="hover:bg-slate-50">
+                        <td className="py-2.5 px-3">
+                          <span className="font-bold text-slate-900 block truncate max-w-[200px]">
+                            {m.name}
+                          </span>
+                          {m.sku && <span className="text-[10px] text-slate-400 font-mono">{m.sku}</span>}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          {formatCurrency(unitPrice)} {m.unit ? `/ ${m.unit}` : ''}
+                        </td>
+                        <td className="py-2.5 px-3 font-bold text-slate-800">
+                          {formatNumber(unitsSold)} {m.unit || 'units'}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-extrabold text-emerald-600">
+                          {formatCurrency(turnover)}
+                        </td>
+                      </tr>
+                    );
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan="4" className="py-8 text-center text-slate-400">
+                      No sales data recorded yet for catalog products
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>

@@ -127,116 +127,63 @@ export function DashboardPage() {
   };
 
   const kpis = analytics?.kpis || {};
-  const revenueData = analytics?.revenueOverview || [];
-  const categoryData = analytics?.categoryBreakdown || [];
+  const rawRevenueOverview = analytics?.revenueOverview || [];
+  const rawCategoryBreakdown = analytics?.categoryBreakdown || [];
 
-  // Construction Low stock products
-  const lowStockItems = inventory.filter((i) => i.isLowStock || i.isOutOfStock);
+  // 100% Real dynamic calculations from active hooks and data stores
+  const totalRevenue = Number(kpis.totalRevenue || 0) || orders.reduce((sum, o) => sum + Number(o.totalAmount || o.total || 0), 0);
+  const totalOrdersCount = orders.length;
+  const pendingOrdersCount = orders.filter((o) =>
+    ['new', 'pending', 'processing'].includes(String(o.orderStatus || o.status || '').toLowerCase())
+  ).length;
+  const totalProductsCount = products.length;
+  const lowStockItems = inventory.filter((i) => i.isLowStock || i.isOutOfStock || (i.stock != null && i.lowStockThreshold != null && i.stock <= i.lowStockThreshold));
   const displayLowStock = lowStockItems.slice(0, 4);
-
-  // Top recent orders
   const recentOrders = orders.slice(0, 5);
+  const totalCustomersCount = customers.length;
+  const totalEnquiriesCount = enquiries.length;
 
-  // Effective high-fidelity B2B construction data fallbacks for flawless UI presentation
-  const effectiveRevenue = kpis?.totalRevenue > 0 ? kpis.totalRevenue : 84500;
-  const effectiveOrdersCount = orders.length > 0 ? orders.length : 12;
-  const effectivePendingOrders = orders.filter((o) => ['new', 'pending'].includes(String(o.orderStatus || o.status || '').toLowerCase())).length || 12;
-  const effectiveProductsCount = products.length > 0 ? products.length : 128;
-  const effectiveLowStockCount = lowStockItems.length > 0 ? lowStockItems.length : 8;
-  const effectiveCustomersCount = customers.length > 0 ? customers.length : 34;
-  const effectiveEnquiriesCount = enquiries.length > 0 ? enquiries.length : 5;
+  // Real chart trajectory derived directly from analytics or real order transactions
+  const revenueChartData = useMemo(() => {
+    if (rawRevenueOverview && rawRevenueOverview.length > 0) {
+      return rawRevenueOverview.map((d) => ({
+        label: d.label || d.month || d.date || '',
+        revenue: Number(d.revenue || 0),
+        orders: Number(d.orders || 0),
+      }));
+    }
+    if (orders.length > 0) {
+      const map = {};
+      orders.forEach((o) => {
+        const d = o.createdAt ? new Date(o.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }) : 'Recent';
+        map[d] = (map[d] || 0) + Number(o.totalAmount || o.total || 0);
+      });
+      return Object.entries(map).map(([label, revenue]) => ({ label, revenue, orders: 1 }));
+    }
+    return [];
+  }, [rawRevenueOverview, orders]);
 
-  const effectiveRevenueData = revenueData && revenueData.length > 0
-    ? revenueData
-    : [
-        { label: '1 Oct', date: '1 Oct', revenue: 35000, orders: 12 },
-        { label: '7 Oct', date: '7 Oct', revenue: 48000, orders: 18 },
-        { label: '14 Oct', date: '14 Oct', revenue: 42000, orders: 15 },
-        { label: '21 Oct', date: '21 Oct', revenue: 68000, orders: 25 },
-        { label: '31 Oct', date: '31 Oct', revenue: 84500, orders: 32 },
-      ];
-
-  const effectiveCategoryData = categoryData && categoryData.length > 0
-    ? categoryData
-    : [
-        { name: 'Steel & Rebars (TMT)', value: 42, count: 54, revenue: 35490, color: '#f59e0b' },
-        { name: 'Cement & Concrete', value: 28, count: 36, revenue: 23660, color: '#10b981' },
-        { name: 'Bricks & Aggregates', value: 18, count: 23, revenue: 15210, color: '#3b82f6' },
-        { name: 'Pipes & Sanitary', value: 12, count: 15, revenue: 10140, color: '#8b5cf6' },
-      ];
-
-  const effectiveRecentOrders = recentOrders.length > 0
-    ? recentOrders
-    : [
-        {
-          id: 'HM12568',
-          orderNumber: 'HM12568',
-          createdAt: '2026-10-14T10:30:00Z',
-          buyer: { company: 'Ramesh Construction', contactName: 'Ramesh Patel' },
-          items: [{ name: 'UltraTech Cement 50kg' }, { name: 'TMT Steel Rod 12mm' }, { name: 'PVC Pipe 4 inch' }, { name: 'River Sand' }],
-          totalAmount: 8400,
-          orderStatus: 'Pending',
-        },
-        {
-          id: 'HM12567',
-          orderNumber: 'HM12567',
-          createdAt: '2026-10-13T18:15:00Z',
-          buyer: { company: 'Sri Sai Builders', contactName: 'Venkat Rao' },
-          items: [{ name: 'TMT Steel Rod 12mm' }, { name: 'PVC Pipe 4 inch' }],
-          totalAmount: 36000,
-          orderStatus: 'Shipped',
-        },
-        {
-          id: 'HM12566',
-          orderNumber: 'HM12566',
-          createdAt: '2026-10-13T11:20:00Z',
-          buyer: { company: 'Green Infra Projects', contactName: 'Priya Sharma' },
-          items: [{ name: 'Red Clay Bricks' }, { name: 'Construction Sand' }, { name: 'UltraTech Cement' }],
-          totalAmount: 9000,
-          orderStatus: 'Delivered',
-        },
-        {
-          id: 'HM12565',
-          orderNumber: 'HM12565',
-          createdAt: '2026-10-12T09:45:00Z',
-          buyer: { company: 'Deccan Constructions', contactName: 'K. Naidu' },
-          items: [{ name: 'River Sand Grade-A' }],
-          totalAmount: 14200,
-          orderStatus: 'Cancelled',
-        },
-      ];
-
-  const effectiveLowStock = displayLowStock.length > 0
-    ? displayLowStock
-    : [
-        {
-          id: 'MAT-CM-01',
-          sku: 'CEM-UT-50',
-          name: 'UltraTech Cement 50kg',
-          warehouseName: 'Main Hub Yard',
-          availableStock: 250,
-          lowStockThreshold: 500,
-          unit: 'bags',
-        },
-        {
-          id: 'MAT-ST-02',
-          sku: 'TMT-12MM',
-          name: 'TMT Steel Rod 12mm',
-          warehouseName: 'Central Depot Bay 3',
-          availableStock: 1200,
-          lowStockThreshold: 3000,
-          unit: 'kg',
-        },
-        {
-          id: 'MAT-PP-03',
-          sku: 'PVC-PIPE-4IN',
-          name: 'PVC Pipe 4 inch',
-          warehouseName: 'Sanitary Yard',
-          availableStock: 15,
-          lowStockThreshold: 100,
-          unit: 'pieces',
-        },
-      ];
+  // Real category breakdown derived dynamically from live products catalog
+  const categoryData = useMemo(() => {
+    if (rawCategoryBreakdown && rawCategoryBreakdown.length > 0) {
+      return rawCategoryBreakdown;
+    }
+    if (!products || products.length === 0) return [];
+    const catMap = {};
+    const palette = ['#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#ec4899', '#06b6d4', '#eab308'];
+    products.forEach((p) => {
+      const cat = p.category || 'General';
+      catMap[cat] = (catMap[cat] || 0) + 1;
+    });
+    const total = products.length;
+    return Object.entries(catMap).map(([name, count], idx) => ({
+      name,
+      count,
+      value: Math.round((count / total) * 100),
+      color: palette[idx % palette.length],
+      revenue: 0,
+    }));
+  }, [rawCategoryBreakdown, products]);
 
   // Quick Action Items
   const quickActions = [
@@ -348,10 +295,10 @@ export function DashboardPage() {
             </div>
             <p className="text-[11px] text-slate-500 font-medium mt-2">Total Products</p>
             <p className="text-xl font-extrabold text-slate-900 leading-tight mt-0.5">
-              {effectiveProductsCount}
+              {totalProductsCount}
             </p>
-            <p className="text-[10px] font-bold text-emerald-600 flex items-center gap-0.5 mt-0.5">
-              <span>↑</span> 12%
+            <p className="text-[10px] font-semibold text-slate-400 mt-0.5">
+              In Catalog
             </p>
           </Link>
 
@@ -368,10 +315,10 @@ export function DashboardPage() {
             </div>
             <p className="text-[11px] text-slate-500 font-medium mt-2">Pending Orders</p>
             <p className="text-xl font-extrabold text-slate-900 leading-tight mt-0.5">
-              {effectivePendingOrders}
+              {pendingOrdersCount}
             </p>
-            <p className="text-[10px] font-bold text-rose-500 flex items-center gap-0.5 mt-0.5">
-              <span>↑</span> 5%
+            <p className="text-[10px] font-semibold text-amber-600 mt-0.5">
+              {pendingOrdersCount > 0 ? 'Requires action' : 'All cleared'}
             </p>
           </Link>
 
@@ -388,9 +335,11 @@ export function DashboardPage() {
             </div>
             <p className="text-[11px] text-slate-500 font-medium mt-2">Low Stock</p>
             <p className="text-xl font-extrabold text-slate-900 leading-tight mt-0.5">
-              {effectiveLowStockCount}
+              {lowStockItems.length}
             </p>
-            <div className="h-4" />
+            <p className="text-[10px] font-semibold text-rose-500 mt-0.5">
+              {lowStockItems.length > 0 ? 'Restock alert' : 'Healthy inventory'}
+            </p>
           </Link>
 
           {/* Total Revenue */}
@@ -406,10 +355,10 @@ export function DashboardPage() {
             </div>
             <p className="text-[11px] text-slate-500 font-medium mt-2">Total Revenue</p>
             <p className="text-xl font-extrabold text-slate-900 leading-tight mt-0.5 truncate">
-              {formatCurrency(effectiveRevenue)}
+              {formatCurrency(totalRevenue)}
             </p>
-            <p className="text-[10px] font-bold text-emerald-600 flex items-center gap-0.5 mt-0.5">
-              <span>↑</span> 18%
+            <p className="text-[10px] font-semibold text-emerald-600 mt-0.5">
+              Gross turnover
             </p>
           </Link>
         </div>
@@ -426,10 +375,11 @@ export function DashboardPage() {
 
           <div className="mt-2.5">
             <p className="text-2xl font-black text-white tracking-tight">
-              {formatCurrency(effectiveRevenue)}
+              {formatCurrency(totalRevenue)}
             </p>
             <p className="text-[11px] font-medium text-emerald-300 flex items-center gap-1 mt-0.5">
-              <span>↑</span> 12.5% from last month
+              <TrendingUp className="w-3 h-3" />
+              {kpis?.revenueGrowth != null ? `${kpis.revenueGrowth >= 0 ? '+' : ''}${kpis.revenueGrowth}% from last period` : 'Live recorded sales'}
             </p>
           </div>
 
@@ -437,10 +387,14 @@ export function DashboardPage() {
           <div className="h-36 w-full mt-2 relative">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart
-                data={effectiveRevenueData.map((d) => ({
-                  date: d.label || d.date || '',
-                  value: Number(d.revenue || 0),
-                }))}
+                data={
+                  revenueChartData.length > 0
+                    ? revenueChartData.map((d) => ({
+                        date: d.label || '',
+                        value: Number(d.revenue || 0),
+                      }))
+                    : [{ date: 'Current', value: totalRevenue }]
+                }
                 margin={{ top: 15, right: 10, left: -25, bottom: 0 }}
               >
                 <defs>
@@ -557,46 +511,50 @@ export function DashboardPage() {
           </div>
 
           <div className="space-y-2">
-            {effectiveRecentOrders.slice(0, 2).map((ord) => (
-              <Link
-                key={ord.id}
-                to={`/seller/orders/${ord.id}`}
-                className="bg-white rounded-2xl p-3 border border-slate-100 shadow-2xs flex items-center justify-between gap-3 hover:bg-slate-50 transition-colors"
-              >
-                <div className="flex items-center gap-3 min-w-0">
-                  {/* Product Bag Thumbnail */}
-                  <div className="w-11 h-11 rounded-xl bg-amber-50 border border-amber-200/80 flex items-center justify-center shrink-0 overflow-hidden shadow-2xs">
-                    <div className="w-8 h-9 rounded-sm bg-amber-400 flex flex-col items-center justify-center text-[7px] font-black text-amber-950 uppercase tracking-tighter leading-none border border-amber-500 shadow-xs">
-                      <span className="scale-75">ULTRA</span>
-                      <span className="text-[6px] text-amber-900 font-bold">50KG</span>
+            {recentOrders.length > 0 ? (
+              recentOrders.slice(0, 2).map((ord) => (
+                <Link
+                  key={ord.id}
+                  to={`/seller/orders/${ord.id}`}
+                  className="bg-white rounded-2xl p-3 border border-slate-100 shadow-2xs flex items-center justify-between gap-3 hover:bg-slate-50 transition-colors"
+                >
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-11 h-11 rounded-xl bg-blue-50 border border-blue-200/80 flex items-center justify-center shrink-0 overflow-hidden shadow-2xs text-[#1D64ED]">
+                      <Package className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-extrabold text-slate-900 truncate">
+                        #{ord.orderNumber || ord.id}
+                      </p>
+                      <p className="text-[11px] font-medium text-slate-600 truncate mt-0.5">
+                        {ord.buyer?.company || ord.buyer?.contactName || ord.customerName || 'Customer'}
+                      </p>
+                      <p className="text-[10px] text-slate-400 mt-0.5">
+                        {formatDate(ord.createdAt)}
+                      </p>
                     </div>
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-xs font-extrabold text-slate-900 truncate">
-                      #{ord.orderNumber || ord.id}
-                    </p>
-                    <p className="text-[11px] font-medium text-slate-600 truncate mt-0.5">
-                      {ord.buyer?.company || 'Ramesh Construction'}
-                    </p>
-                    <p className="text-[10px] text-slate-400 mt-0.5">
-                      {formatDate(ord.createdAt)}
-                    </p>
-                  </div>
-                </div>
 
-                <div className="flex items-center gap-2 shrink-0">
-                  <div className="text-right">
-                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FEF3C7] text-[#D97706] inline-block mb-0.5">
-                      {ord.orderStatus || 'Pending'}
-                    </span>
-                    <p className="text-xs font-black text-slate-900">
-                      {formatCurrency(ord.totalAmount)}
-                    </p>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="text-right">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#FEF3C7] text-[#D97706] inline-block mb-0.5">
+                        {ord.orderStatus || ord.status || 'Pending'}
+                      </span>
+                      <p className="text-xs font-black text-slate-900">
+                        {formatCurrency(ord.totalAmount)}
+                      </p>
+                    </div>
+                    <ChevronRight className="w-4 h-4 text-slate-300" />
                   </div>
-                  <ChevronRight className="w-4 h-4 text-slate-300" />
-                </div>
-              </Link>
-            ))}
+                </Link>
+              ))
+            ) : (
+              <div className="bg-white rounded-2xl p-6 border border-slate-100 text-center shadow-2xs">
+                <ShoppingCart className="w-8 h-8 text-slate-300 mx-auto mb-1.5" />
+                <p className="text-xs font-semibold text-slate-700">No recent orders</p>
+                <p className="text-[11px] text-slate-400 mt-0.5">New purchase orders will appear here automatically</p>
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -691,7 +649,7 @@ export function DashboardPage() {
           </div>
           <div className="mt-1.5 sm:mt-2">
             <div className="text-lg sm:text-[22px] font-black text-slate-900 tracking-tight group-hover:text-emerald-700 transition-colors truncate">
-              {formatCurrency(effectiveRevenue)}
+              {formatCurrency(totalRevenue)}
             </div>
             <div className="mt-1 flex items-center justify-between text-[10px] sm:text-[11px]">
               <span className="text-emerald-600 font-bold flex items-center gap-0.5">
@@ -718,13 +676,13 @@ export function DashboardPage() {
           </div>
           <div className="mt-1.5 sm:mt-2">
             <div className="text-lg sm:text-[22px] font-black text-slate-900 tracking-tight group-hover:text-blue-700 transition-colors">
-              {effectiveOrdersCount}
+              {totalOrdersCount}
             </div>
             <div className="mt-1 flex items-center justify-between text-[10px] sm:text-[11px]">
               <span className="text-blue-600 font-bold flex items-center gap-0.5 truncate">
                 <TrendingUp className="w-3 h-3 sm:w-3.5 sm:h-3.5" /> Real-time
               </span>
-              <span className="text-amber-600 font-semibold truncate ml-1">{effectivePendingOrders} Pending</span>
+              <span className="text-amber-600 font-semibold truncate ml-1">{pendingOrdersCount} Pending</span>
             </div>
           </div>
         </Link>
@@ -745,11 +703,11 @@ export function DashboardPage() {
           </div>
           <div className="mt-1.5 sm:mt-2">
             <div className="text-lg sm:text-[22px] font-black text-slate-900 tracking-tight group-hover:text-amber-700 transition-colors">
-              {effectiveProductsCount}
+              {totalProductsCount}
             </div>
             <div className="mt-1 flex items-center justify-between text-[10px] sm:text-[11px]">
-              <span className="text-emerald-600 font-bold truncate">{effectiveProductsCount} registered</span>
-              <span className="text-slate-500 font-medium truncate ml-1">{Math.round(effectiveProductsCount * 0.88)} Live</span>
+              <span className="text-emerald-600 font-bold truncate">{totalProductsCount} registered</span>
+              <span className="text-slate-500 font-medium truncate ml-1">{products.filter((p) => p.status === 'Active' || p.active).length} Live</span>
             </div>
           </div>
         </Link>
@@ -770,10 +728,10 @@ export function DashboardPage() {
           </div>
           <div className="mt-1.5 sm:mt-2">
             <div className="text-lg sm:text-[22px] font-black text-slate-900 tracking-tight group-hover:text-purple-700 transition-colors">
-              {effectiveCustomersCount}
+              {totalCustomersCount}
             </div>
             <div className="mt-1 flex items-center justify-between text-[10px] sm:text-[11px]">
-              <span className="text-purple-600 font-bold truncate">{effectiveCustomersCount} enrolled</span>
+              <span className="text-purple-600 font-bold truncate">{totalCustomersCount} enrolled</span>
               <span className="text-slate-400 font-medium hidden sm:inline">Directory →</span>
             </div>
           </div>
@@ -795,10 +753,10 @@ export function DashboardPage() {
           </div>
           <div className="mt-1.5 sm:mt-2">
             <div className="text-lg sm:text-[22px] font-black text-rose-600 tracking-tight flex items-center gap-1">
-              {effectiveLowStockCount} <span className="text-[10px] sm:text-xs font-normal text-slate-500">Items</span>
+              {lowStockItems.length} <span className="text-[10px] sm:text-xs font-normal text-slate-500">Items</span>
             </div>
             <div className="mt-1 flex items-center justify-between text-[10px] sm:text-[11px]">
-              <span className="text-rose-600 font-bold truncate">{effectiveLowStockCount > 0 ? 'Action Needed' : 'Healthy'}</span>
+              <span className="text-rose-600 font-bold truncate">{lowStockItems.length > 0 ? 'Action Needed' : 'Healthy'}</span>
               <span className="text-amber-600 font-semibold group-hover:underline truncate ml-1">
                 Restock →
               </span>
@@ -822,10 +780,10 @@ export function DashboardPage() {
           </div>
           <div className="mt-1.5 sm:mt-2">
             <div className="text-lg sm:text-[22px] font-black text-slate-900 tracking-tight group-hover:text-indigo-700 transition-colors">
-              {effectiveEnquiriesCount}
+              {totalEnquiriesCount}
             </div>
             <div className="mt-1 flex items-center justify-between text-[10px] sm:text-[11px]">
-              <span className="text-indigo-600 font-bold truncate">{effectiveEnquiriesCount} Unquoted</span>
+              <span className="text-indigo-600 font-bold truncate">{totalEnquiriesCount} Unquoted</span>
               <span className="text-amber-600 font-semibold group-hover:underline truncate ml-1">
                 Reply →
               </span>
@@ -870,19 +828,19 @@ export function DashboardPage() {
               <div className="min-w-0">
                 <span className="text-[9px] sm:text-[10px] text-slate-400 uppercase font-bold block truncate">Avg Order</span>
                 <span className="text-[11px] sm:text-sm font-extrabold text-slate-900 truncate block">
-                  {formatCurrency(kpis.averageOrderValue || Math.round(effectiveRevenue / (effectiveOrdersCount || 1)))}
+                  {formatCurrency(kpis.averageOrderValue || (totalOrdersCount > 0 ? Math.round(totalRevenue / totalOrdersCount) : 0))}
                 </span>
               </div>
               <div className="min-w-0">
                 <span className="text-[9px] sm:text-[10px] text-slate-400 uppercase font-bold block truncate">Conversion</span>
                 <span className="text-[11px] sm:text-sm font-extrabold text-emerald-600 truncate block">
-                  {kpis.conversionRate || 14.8}%
+                  {kpis.conversionRate || 0}%
                 </span>
               </div>
               <div className="min-w-0">
                 <span className="text-[9px] sm:text-[10px] text-slate-400 uppercase font-bold block truncate">Daily Run</span>
                 <span className="text-[11px] sm:text-sm font-extrabold text-amber-600 truncate block">
-                  {formatCurrency(Math.round(effectiveRevenue / 30))}
+                  {formatCurrency(Math.round(totalRevenue / 30))}
                 </span>
               </div>
             </div>
@@ -890,7 +848,14 @@ export function DashboardPage() {
             {/* Recharts Chart Area */}
             <div className="h-72 w-full pt-2">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={effectiveRevenueData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+                <AreaChart
+                  data={
+                    revenueChartData.length > 0
+                      ? revenueChartData
+                      : [{ label: 'Current', revenue: totalRevenue, orders: totalOrdersCount }]
+                  }
+                  margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                >
                   <defs>
                     <linearGradient id="salesGrad" x1="0" y1="0" x2="0" y2="1">
                       <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.4} />
@@ -1091,14 +1056,14 @@ export function DashboardPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-700 font-medium">
-                  {effectiveRecentOrders.length === 0 ? (
+                  {recentOrders.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="py-8 text-center text-slate-400">
                         No orders received yet. New purchase orders will appear here.
                       </td>
                     </tr>
                   ) : (
-                    effectiveRecentOrders.map((order) => (
+                    recentOrders.map((order) => (
                       <tr key={order.id} className="hover:bg-slate-50/80 transition-colors">
                         <td className="py-3 px-3">
                           <span className="font-mono font-bold text-slate-900 block hover:text-amber-600">
@@ -1110,7 +1075,7 @@ export function DashboardPage() {
                         </td>
                         <td className="py-3 px-3">
                           <p className="font-bold text-slate-900 truncate max-w-[150px]">
-                            {order.buyer?.company || 'Contractor Enterprise'}
+                            {order.buyer?.company || order.buyer?.contactName || order.customerName || 'Customer'}
                           </p>
                           <p className="text-[10px] text-slate-500 truncate max-w-[150px]">
                             {order.items?.[0]?.name}
@@ -1141,7 +1106,7 @@ export function DashboardPage() {
           </div>
 
           <div className="pt-3 border-t border-slate-100 mt-2 flex items-center justify-between text-xs text-slate-500">
-            <span>Showing latest {effectiveRecentOrders.length} dispatches</span>
+            <span>Showing latest {recentOrders.length} dispatches</span>
             <Link to="/seller/orders" className="font-semibold text-amber-600 hover:underline">
               Fulfillment Board →
             </Link>
@@ -1168,7 +1133,7 @@ export function DashboardPage() {
               </Link>
             </div>
 
-            {effectiveLowStock.length === 0 ? (
+            {displayLowStock.length === 0 ? (
               <div className="py-8 text-center text-slate-400">
                 <CheckCircle2 className="w-8 h-8 text-emerald-500 mx-auto mb-2" />
                 <p className="text-xs font-semibold text-slate-700">All inventory levels are healthy</p>
@@ -1176,7 +1141,7 @@ export function DashboardPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {effectiveLowStock.map((item) => {
+                {displayLowStock.map((item) => {
                   const stock = item.availableStock ?? item.stock ?? 0;
                   const threshold = item.lowStockThreshold || 50;
                   const percent = Math.min(100, Math.round((stock / threshold) * 100));
@@ -1195,7 +1160,7 @@ export function DashboardPage() {
                             {item.name}
                           </p>
                           <p className="text-[10.5px] text-slate-500 font-mono mt-0.5">
-                            ID: {item.sku || item.id} • {item.warehouseName || 'Hub Yard'}
+                            ID: {item.sku || item.id}{item.warehouseName ? ` • ${item.warehouseName}` : ''}
                           </p>
                         </div>
 

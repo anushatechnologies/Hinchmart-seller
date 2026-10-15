@@ -154,18 +154,28 @@ export function QuotationDetailPage() {
                 <HardHat className="w-5 h-5 text-white" />
               </div>
               <span className="font-extrabold text-lg tracking-tight">
-                {profile?.companyName || 'Ultratech Infra & Steel Suppliers'}
+                {profile?.companyName || 'Seller Enterprise'}
               </span>
             </div>
-            <p className="text-xs text-slate-600 max-w-sm leading-tight">
-              {profile?.address?.completeAddress || 'Industrial Area Phase 2, Pune, Maharashtra'}
-            </p>
-            <p className="text-xs text-slate-600">
-              Phone: {profile?.businessPhone || '+91 20 6711 9000'} • Email: {profile?.companyEmail || 'sales@ultratechinfra.com'}
-            </p>
-            <p className="text-xs font-mono font-bold text-slate-900">
-              GSTIN: {profile?.legal?.gstin || '27AAACU1234F1Z8'} • PAN: {profile?.legal?.pan || 'AAACU1234F'}
-            </p>
+            {profile?.address?.completeAddress && (
+              <p className="text-xs text-slate-600 max-w-sm leading-tight">
+                {profile.address.completeAddress}
+              </p>
+            )}
+            {(profile?.businessPhone || profile?.companyEmail) && (
+              <p className="text-xs text-slate-600">
+                {profile?.businessPhone ? `Phone: ${profile.businessPhone}` : ''}
+                {profile?.businessPhone && profile?.companyEmail ? ' • ' : ''}
+                {profile?.companyEmail ? `Email: ${profile.companyEmail}` : ''}
+              </p>
+            )}
+            {(profile?.legal?.gstin || profile?.legal?.pan) && (
+              <p className="text-xs font-mono font-bold text-slate-900">
+                {profile?.legal?.gstin ? `GSTIN: ${profile.legal.gstin}` : ''}
+                {profile?.legal?.gstin && profile?.legal?.pan ? ' • ' : ''}
+                {profile?.legal?.pan ? `PAN: ${profile.legal.pan}` : ''}
+              </p>
+            )}
           </div>
 
           <div className="text-right space-y-1">

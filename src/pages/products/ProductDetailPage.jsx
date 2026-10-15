@@ -804,7 +804,7 @@ export function ProductDetailPage() {
                       {productOrders.map((ord) => (
                         <tr key={ord.id} className="hover:bg-slate-50">
                           <td className="py-2.5 px-3 font-mono font-bold text-slate-900">{ord.orderNumber}</td>
-                          <td className="py-2.5 px-3">{ord.buyer?.company || 'Contractor Enterprise'}</td>
+                          <td className="py-2.5 px-3">{ord.buyer?.company || ord.buyer?.contactName || ord.customerName || 'Customer'}</td>
                           <td className="py-2.5 px-3 text-slate-500">{formatDate(ord.createdAt)}</td>
                           <td className="py-2.5 px-3 font-bold text-slate-900">{formatCurrency(ord.totalAmount)}</td>
                           <td className="py-2.5 px-3"><StatusBadge status={ord.orderStatus} /></td>
