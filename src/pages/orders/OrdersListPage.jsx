@@ -23,6 +23,8 @@ import {
   ChevronLeft,
   ChevronRight,
   TrendingUp,
+  User,
+  MapPin,
 } from 'lucide-react';
 import { useOrders } from '../../hooks/useOrders';
 import { useSellerProfile } from '../../hooks/useSellerProfile';
@@ -98,7 +100,7 @@ export function OrdersListPage() {
   // Compute live summary statistics for metric cards
   const stats = useMemo(() => {
     const total = orders.length;
-    const pending = orders.filter((o) => ['new', 'pending'].includes((o.orderStatus || '').toLowerCase())).length;
+    const pending = orders.filter((o) => ['new', 'pending', 'placed'].includes((o.orderStatus || '').toLowerCase())).length;
     const confirmed = orders.filter((o) => (o.orderStatus || '').toLowerCase() === 'confirmed').length;
     const processing = orders.filter((o) => (o.orderStatus || '').toLowerCase() === 'processing').length;
     const ready = orders.filter((o) =>
@@ -340,18 +342,219 @@ export function OrdersListPage() {
     );
   };
 
+  // Filter tabs for phone view
+  const mobileOrderTabs = useMemo(() => [
+    { label: `All (${orders.length})`, key: 'all' },
+    { label: `Pending (${stats.pending || 0})`, key: 'pending' },
+    { label: `Shipped (${(stats.dispatched || 0) + (stats.inTransit || 0)})`, key: 'shipped' },
+    { label: `Delivered (${stats.delivered || 0})`, key: 'delivered' },
+  ], [orders.length, stats.pending, stats.dispatched, stats.inTransit, stats.delivered]);
+
+  const displayMobileOrders = useMemo(() => {
+    return filteredOrders.map((o) => {
+      const firstItem = o.items?.[0] || {};
+      const rawStatus = String(o.orderStatus || o.status || 'Pending');
+      let statusType = 'pending';
+      if (/deliver|complete/i.test(rawStatus)) statusType = 'delivered';
+      else if (/ship|transit|dispatch/i.test(rawStatus)) statusType = 'shipped';
+      else if (/cancel/i.test(rawStatus)) statusType = 'cancelled';
+
+      return {
+        id: o.id || o.orderNumber,
+        orderNumber: o.orderNumber || o.id,
+        date: formatDate(o.createdAt) || '—',
+        customerName: o.buyer?.company || o.buyer?.name || 'Customer',
+        location: o.deliveryAddress?.city
+          ? `${o.deliveryAddress.city}${o.deliveryAddress.state ? `, ${o.deliveryAddress.state}` : ''}`
+          : '—',
+        status: rawStatus.charAt(0).toUpperCase() + rawStatus.slice(1).toLowerCase(),
+        statusType,
+        itemImage:
+          firstItem.image ||
+          firstItem.imageUrl ||
+          'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?w=300&auto=format&fit=crop&q=80',
+        itemName: firstItem.name || 'Order Item',
+        itemQty: `${firstItem.quantity || 1} ${firstItem.unit || 'units'}`,
+        totalAmount: o.totalAmount || 0,
+      };
+    });
+  }, [filteredOrders]);
+
   return (
-    <div className="space-y-5 animate-fade-in-up">
-      {/* 1. Header with Title, Subtitle, and Top Action Buttons (No outer box container) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+    <>
+      {/* ================= PHONE VIEW ORDERS (Matches Phone Screenshot 3 Exactly) ================= */}
+      <div className="block md:hidden space-y-3.5 pb-2">
+        {/* Title */}
         <div>
-          <h1 className="text-2xl font-black text-slate-900 tracking-tight">Orders</h1>
-          <p className="text-xs text-slate-500 mt-0.5 font-medium">
-            Manage your construction orders, track delivery, and view order performance.
-          </p>
+          <h1 className="text-xl font-black text-slate-900 tracking-tight">Orders</h1>
         </div>
 
-        <div className="flex items-center gap-2.5">
+        {/* Status Filter Tabs */}
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
+          {mobileOrderTabs.map((tab) => {
+            const isActive =
+              (tab.key === 'all' && activeStatus === 'all') ||
+              (tab.key === 'pending' && activeStatus === 'pending') ||
+              (tab.key === 'shipped' && ['shipped', 'dispatched', 'in_transit'].includes(activeStatus)) ||
+              (tab.key === 'delivered' && ['delivered', 'completed'].includes(activeStatus));
+
+            return (
+              <button
+                key={tab.key}
+                type="button"
+                onClick={() => handleStatusSelect(tab.key)}
+                className={`px-3.5 py-1.5 rounded-full text-xs font-semibold shrink-0 transition-all ${
+                  isActive
+                    ? 'bg-blue-600 text-white shadow-xs'
+                    : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Search & Filter Bar */}
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search orders by ID or customer..."
+              className="w-full pl-9 pr-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={() => setAdvancedOpen(!advancedOpen)}
+            className="p-2.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-xl text-slate-600 transition-colors shrink-0"
+            title="Filter Orders"
+          >
+            <SlidersHorizontal className="w-4 h-4" />
+          </button>
+        </div>
+
+        {/* Orders Card List */}
+        <div className="space-y-3">
+          {displayMobileOrders.map((order) => {
+            const isPending = order.statusType === 'pending';
+            const isShipped = order.statusType === 'shipped';
+            const isDelivered = order.statusType === 'delivered';
+
+            return (
+              <div
+                key={order.id}
+                className="bg-white rounded-2xl p-4 border border-slate-100 shadow-2xs space-y-3 transition-shadow"
+              >
+                {/* Header: Order ID & Date + Status Badge */}
+                <div className="flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-bold text-slate-900 tracking-tight">
+                      Order #{order.orderNumber}
+                    </span>
+                    <span className="text-[10px] text-slate-400 font-medium">
+                      {order.date}
+                    </span>
+                  </div>
+
+                  {/* Status Badge */}
+                  <span
+                    className={`px-2.5 py-0.5 rounded-full text-[10px] font-semibold shrink-0 ${
+                      isPending
+                        ? 'bg-amber-50 text-amber-600'
+                        : isShipped
+                        ? 'bg-blue-50 text-blue-600'
+                        : isDelivered
+                        ? 'bg-emerald-50 text-emerald-700'
+                        : 'bg-slate-100 text-slate-700'
+                    }`}
+                  >
+                    {order.status}
+                  </span>
+                </div>
+
+                {/* Customer Row */}
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center shrink-0 border border-slate-200/60">
+                    <User className="w-4 h-4 text-slate-500" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-900 truncate">
+                      {order.customerName}
+                    </p>
+                    <p className="text-[11px] text-slate-400 truncate">
+                      {order.location}
+                    </p>
+                  </div>
+                </div>
+
+                {/* Product Summary Row */}
+                <div className="flex items-center justify-between gap-3 pt-1">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-11 h-11 rounded-lg overflow-hidden bg-slate-100 shrink-0 border border-slate-100">
+                      <img
+                        src={order.itemImage}
+                        alt={order.itemName}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                        onError={(e) => {
+                          e.currentTarget.onerror = null;
+                          e.currentTarget.src = 'https://images.unsplash.com/photo-1590069261209-f8e9b8642343?w=300&auto=format&fit=crop&q=80';
+                        }}
+                      />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-semibold text-slate-800 truncate">
+                        {order.itemName}
+                      </p>
+                      <p className="text-[11px] text-slate-400 mt-0.5">
+                        {order.itemQty}
+                      </p>
+                    </div>
+                  </div>
+
+                  <span className="text-sm font-bold text-slate-900 shrink-0">
+                    ₹{typeof order.totalAmount === 'number' ? order.totalAmount.toLocaleString('en-IN') : order.totalAmount}
+                  </span>
+                </div>
+
+                {/* Full-width Action Button */}
+                <button
+                  type="button"
+                  onClick={() => navigate(`/seller/orders/${order.id}`)}
+                  className="w-full py-2 rounded-lg bg-blue-50/70 hover:bg-blue-100 text-blue-600 font-semibold text-xs text-center border border-blue-100/60 transition-colors"
+                >
+                  View Details
+                </button>
+              </div>
+            );
+          })}
+
+          {displayMobileOrders.length === 0 && (
+            <div className="bg-white rounded-xl p-8 border border-slate-100 text-center">
+              <FileText className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+              <p className="text-xs font-semibold text-slate-700">No orders found</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">Try clearing your filters or search criteria</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ================= LAPTOP / DESKTOP ORDERS (100% Unchanged) ================= */}
+      <div className="hidden md:block space-y-5 animate-fade-in-up">
+        {/* 1. Header with Title, Subtitle, and Top Action Buttons (No outer box container) */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-2xl font-black text-slate-900 tracking-tight">Orders</h1>
+            <p className="text-xs text-slate-500 mt-0.5 font-medium">
+              Manage your construction orders, track delivery, and view order performance.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2.5">
           <button
             type="button"
             onClick={handleExport}
@@ -1196,7 +1399,7 @@ export function OrdersListPage() {
             <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4">
               <div>
                 <h2 className="text-lg font-black text-slate-900">
-                  {profile?.companyName || 'Seller Enterprise'}
+                  {profile?.companyName || user?.storeName || user?.companyName || profile?.name || 'Seller'}
                 </h2>
                 {profile?.address?.completeAddress && (
                   <p className="text-slate-600">
@@ -1310,5 +1513,6 @@ export function OrdersListPage() {
         </Modal>
       )}
     </div>
+    </>
   );
 }

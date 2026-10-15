@@ -61,8 +61,8 @@ export function useSellerProfile(explicitSellerId = null) {
   });
 
   const uploadMandatoryDocMutation = useMutation({
-    mutationFn: ({ documentType, file }) =>
-      sellerService.uploadMandatoryDocument(activeSellerId, documentType, file),
+    mutationFn: ({ documentType, file, fileUrl }) =>
+      sellerService.uploadMandatoryDocument(activeSellerId, documentType, file, fileUrl),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['seller', 'vault'] });
       queryClient.invalidateQueries({ queryKey: ['seller', 'documents'] });

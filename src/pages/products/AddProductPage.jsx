@@ -20,12 +20,14 @@ import {
   Check,
   TrendingDown,
   SlidersHorizontal,
+  ChevronDown,
 } from 'lucide-react';
 import { useCategories, useSubcategories, useBrands } from '../../hooks/useCategories';
 import { useProducts } from '../../hooks/useProducts';
 import { UNITS, GST_RATES } from '../../constants/units';
 import { useUIStore } from '../../store/uiStore';
 import { uploadService } from '../../services/upload.service';
+import { compressImageFile } from '../../utils/imageCompressor';
 
 export function AddProductPage() {
   const navigate = useNavigate();
@@ -187,14 +189,21 @@ export function AddProductPage() {
           }
         } catch (err) {
           console.warn('S3 upload notice:', err?.message);
-          // Fallback to data URL
-          const reader = new FileReader();
-          reader.onload = (event) => {
-            if (event.target?.result) {
-              setImages((prev) => [...prev, event.target.result]);
+          // Fallback to compressed data URL
+          try {
+            const compressed = await compressImageFile(file, { maxDim: 1200, quality: 0.85 });
+            if (compressed) {
+              setImages((prev) => [...prev, compressed]);
+            } else {
+              const reader = new FileReader();
+              reader.onload = (event) => {
+                if (event.target?.result) {
+                  setImages((prev) => [...prev, event.target.result]);
+                }
+              };
+              reader.readAsDataURL(file);
             }
-          };
-          reader.readAsDataURL(file);
+          } catch (_) {}
         }
       }
     } finally {
@@ -320,8 +329,8 @@ export function AddProductPage() {
     try {
       await createProduct(newProductPayload);
       addToast({
-        title: 'Product Submitted',
-        message: 'Product listing submitted successfully to the marketplace.',
+        title: 'Pending Admin Approval',
+        message: 'Product submitted successfully. It will remain in PENDING status until approved by an administrator.',
         type: 'success',
       });
       navigate('/seller/products');
@@ -338,11 +347,625 @@ export function AddProductPage() {
   };
 
   return (
-    <div className="w-full pb-16">
-      {/* Outer Card with Dark Slate/Navy Header (Exact Match to Screenshot 3, 4, 5) */}
-      <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
-        {/* DARK NAVY HEADER BANNER */}
-        <div className="bg-[#0f172a] text-white p-5 sm:p-6 flex items-center justify-between border-b border-slate-800">
+    <>
+      {/* ================= PHONE VIEW ADD PRODUCT (All Fields Included with Professional Mobile UI) ================= */}
+      <div className="block md:hidden pb-10 space-y-4">
+        {/* Mobile Page Header Banner */}
+        <div className="flex items-center justify-between pb-1">
+          <div>
+            <h1 className="text-lg font-bold text-slate-900 tracking-tight">Add New Product</h1>
+            <p className="text-xs text-slate-500">Submit catalog listing for admin approval</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/seller/products')}
+            className="px-3 py-1.5 rounded-lg border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 text-xs font-semibold shadow-2xs"
+          >
+            Cancel
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* ========================================================================= */}
+          {/* MOBILE CARD 1: PRODUCT IDENTITY & CLASSIFICATION                          */}
+          {/* ========================================================================= */}
+          <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs space-y-3.5">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-blue-700 pb-2 border-b border-slate-100">
+              <Package className="w-4 h-4 text-blue-600" />
+              <span>Product Identity & Classification</span>
+            </div>
+
+            {/* Product Title */}
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                Product Title / Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => handleTitleChange(e.target.value)}
+                placeholder="e.g. Ultratech PPC Super Cement 50kg"
+                required
+                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+              />
+            </div>
+
+            {/* URL Slug & SKU Code */}
+            <div className="grid grid-cols-2 gap-2.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  URL Slug
+                </label>
+                <input
+                  type="text"
+                  value={slug}
+                  onChange={(e) => {
+                    setSlugManuallyEdited(true);
+                    setSlug(e.target.value);
+                  }}
+                  placeholder="auto-generated-slug"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  SKU Code <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={sku}
+                  onChange={(e) => setSku(e.target.value)}
+                  placeholder="e.g. UTC-PPC-50"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+            </div>
+
+            {/* Category Dropdown */}
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                Primary Category <span className="text-red-500">*</span>
+              </label>
+              <div className="relative">
+                <select
+                  value={categoryId}
+                  onChange={(e) => {
+                    setCategoryId(e.target.value);
+                    setSubcategoryId('');
+                    setBrandId('');
+                  }}
+                  required
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none pr-8 cursor-pointer"
+                >
+                  <option value="">Select primary category</option>
+                  {categories.map((c) => (
+                    <option key={c.id || c.categoryId} value={c.id || c.categoryId}>
+                      {c.name || c.title}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+            </div>
+
+            {/* Subcategory & Brand */}
+            <div className="grid grid-cols-2 gap-2.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  Subcategory
+                </label>
+                <div className="relative">
+                  <select
+                    value={subcategoryId}
+                    onChange={(e) => setSubcategoryId(e.target.value)}
+                    disabled={!categoryId || subcategories.length === 0}
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none pr-7 cursor-pointer disabled:opacity-50"
+                  >
+                    <option value="">{categoryId ? 'Select subcategory' : 'Select category first'}</option>
+                    {subcategories.map((s) => (
+                      <option key={s.id || s.subcategoryId} value={s.id || s.subcategoryId}>
+                        {s.name || s.title}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  Brand / Maker
+                </label>
+                <div className="relative">
+                  {brands && brands.length > 0 ? (
+                    <select
+                      value={brandId}
+                      onChange={(e) => {
+                        setBrandId(e.target.value);
+                        const found = brands.find((b) => String(b.id || b.brandId) === e.target.value);
+                        if (found) setBrandName(found.name || found.brandName || '');
+                      }}
+                      className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none pr-7 cursor-pointer"
+                    >
+                      <option value="">Select brand</option>
+                      {brands.map((b) => (
+                        <option key={b.id || b.brandId} value={b.id || b.brandId}>
+                          {b.name || b.brandName}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      value={brandName}
+                      onChange={(e) => setBrandName(e.target.value)}
+                      placeholder="e.g. Ultratech"
+                      className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    />
+                  )}
+                  {brands && brands.length > 0 && (
+                    <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* ========================================================================= */}
+          {/* MOBILE CARD 2: PRICING, INVENTORY & TAX STRUCTURE                         */}
+          {/* ========================================================================= */}
+          <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs space-y-3.5">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-emerald-700 pb-2 border-b border-slate-100">
+              <IndianRupee className="w-4 h-4 text-emerald-600" />
+              <span>Pricing, Inventory & Tax Structure</span>
+            </div>
+
+            {/* Base Price, Selling Price, MRP */}
+            <div className="grid grid-cols-3 gap-2">
+              <div>
+                <label className="block text-[11px] font-bold text-slate-800 mb-1">
+                  Base Price <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">₹</span>
+                  <input
+                    type="number"
+                    value={price}
+                    onChange={(e) => handlePriceChange(e.target.value)}
+                    placeholder="0"
+                    required
+                    min="0"
+                    step="any"
+                    className="w-full pl-6 pr-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-800 mb-1">
+                  Selling Price <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">₹</span>
+                  <input
+                    type="number"
+                    value={sellingPrice}
+                    onChange={(e) => setSellingPrice(e.target.value)}
+                    placeholder="0"
+                    required
+                    min="0"
+                    step="any"
+                    className="w-full pl-6 pr-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-slate-800 mb-1">
+                  MRP (₹)
+                </label>
+                <div className="relative">
+                  <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs">₹</span>
+                  <input
+                    type="number"
+                    value={mrp}
+                    onChange={(e) => setMrp(e.target.value)}
+                    placeholder="0"
+                    min="0"
+                    step="any"
+                    className="w-full pl-6 pr-2 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Unit of Measure & MOQ */}
+            <div className="grid grid-cols-2 gap-2.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  Unit of Measure <span className="text-red-500">*</span>
+                </label>
+                <div className="relative">
+                  <select
+                    value={unit}
+                    onChange={(e) => setUnit(e.target.value)}
+                    required
+                    className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none pr-7 cursor-pointer"
+                  >
+                    <option value="">Select unit</option>
+                    {UNITS.map((u) => (
+                      <option key={u.value} value={u.value}>
+                        {u.label}
+                      </option>
+                    ))}
+                  </select>
+                  <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  Min Order Qty (MOQ)
+                </label>
+                <input
+                  type="number"
+                  value={moq}
+                  onChange={(e) => setMoq(e.target.value)}
+                  placeholder="1"
+                  min="1"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+            </div>
+
+            {/* Physical Stock & HSN Code */}
+            <div className="grid grid-cols-2 gap-2.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  Physical Stock <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="number"
+                  value={stock}
+                  onChange={(e) => setStock(e.target.value)}
+                  placeholder="Available quantity"
+                  required
+                  min="0"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  HSN / SAC Code
+                </label>
+                <input
+                  type="text"
+                  value={hsn}
+                  onChange={(e) => setHsn(e.target.value)}
+                  placeholder="e.g. 252329"
+                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+            </div>
+
+            {/* GST Tax Slab */}
+            <div>
+              <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                GST Tax Slab (%)
+              </label>
+              <div className="relative">
+                <select
+                  value={gstRate}
+                  onChange={(e) => setGstRate(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500/20 appearance-none pr-8 cursor-pointer"
+                >
+                  {GST_RATES.map((g) => (
+                    <option key={g.value} value={`${g.value}% GST`}>
+                      {g.label}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="w-4 h-4 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+              </div>
+            </div>
+
+            {/* 24-Hour Express Delivery Toggle */}
+            <div className="flex items-center justify-between p-3 bg-amber-50/60 border border-amber-200/80 rounded-xl">
+              <div className="flex items-center gap-2">
+                <Zap className="w-4 h-4 text-amber-600 shrink-0" />
+                <div>
+                  <span className="text-xs font-bold text-slate-900 block">Express 24-Hour Dispatch</span>
+                  <span className="text-[10px] text-slate-500">Order dispatched within 24 hours of confirmation</span>
+                </div>
+              </div>
+              <input
+                type="checkbox"
+                checked={is24HourDelivery}
+                onChange={(e) => setIs24HourDelivery(e.target.checked)}
+                className="w-4 h-4 text-blue-600 rounded cursor-pointer"
+              />
+            </div>
+          </div>
+
+          {/* ========================================================================= */}
+          {/* MOBILE CARD 3: WHOLESALE BULK TIER PRICING                                */}
+          {/* ========================================================================= */}
+          <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-violet-700">
+                <TrendingDown className="w-4 h-4 text-violet-600" />
+                <span>Tiered Wholesale Pricing</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddTier}
+                className="px-2.5 py-1 bg-violet-50 text-violet-700 border border-violet-200 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-violet-100 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Tier</span>
+              </button>
+            </div>
+
+            {bulkPricingTiers.length === 0 ? (
+              <p className="text-xs text-slate-400 py-1">
+                No wholesale discount tiers added. Tap "+ Add Tier" to offer volume discounts for bulk contractors.
+              </p>
+            ) : (
+              <div className="space-y-2.5">
+                {bulkPricingTiers.map((tier, idx) => (
+                  <div key={idx} className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800">Tier #{idx + 1}</span>
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveTier(idx)}
+                        className="text-rose-500 hover:text-rose-700 p-1"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-xs">
+                      <div>
+                        <label className="text-[10px] text-slate-500 block mb-0.5">Min Qty</label>
+                        <input
+                          type="number"
+                          value={tier.minQty}
+                          onChange={(e) => handleTierChange(idx, 'minQty', e.target.value)}
+                          className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                          placeholder="Min"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-500 block mb-0.5">Max Qty</label>
+                        <input
+                          type="number"
+                          value={tier.maxQty || ''}
+                          onChange={(e) => handleTierChange(idx, 'maxQty', e.target.value)}
+                          className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs"
+                          placeholder="Max"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] text-slate-500 block mb-0.5">Price (₹)</label>
+                        <input
+                          type="number"
+                          value={tier.price}
+                          onChange={(e) => handleTierChange(idx, 'price', e.target.value)}
+                          className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-xs font-bold"
+                          placeholder="Rate"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ========================================================================= */}
+          {/* MOBILE CARD 4: TECHNICAL SPECIFICATIONS                                   */}
+          {/* ========================================================================= */}
+          <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-700">
+                <SlidersHorizontal className="w-4 h-4 text-slate-600" />
+                <span>Technical Specifications</span>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddSpec}
+                className="px-2.5 py-1 bg-slate-100 text-slate-700 border border-slate-200 rounded-lg text-xs font-bold flex items-center gap-1 hover:bg-slate-200 transition-colors"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add Spec</span>
+              </button>
+            </div>
+
+            {specifications.length === 0 ? (
+              <p className="text-xs text-slate-400 py-1">
+                No custom specifications added. Tap "+ Add Spec" for grade, dimensions, chemical properties, etc.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {specifications.map((spec, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <input
+                      type="text"
+                      placeholder="e.g. Compressive Strength"
+                      value={spec.key}
+                      onChange={(e) => handleSpecChange(idx, 'key', e.target.value)}
+                      className="flex-1 px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800"
+                    />
+                    <input
+                      type="text"
+                      placeholder="e.g. 53 MPa"
+                      value={spec.value}
+                      onChange={(e) => handleSpecChange(idx, 'value', e.target.value)}
+                      className="flex-1 px-2.5 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-800 font-semibold"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveSpec(idx)}
+                      className="p-1.5 text-slate-400 hover:text-rose-600"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ========================================================================= */}
+          {/* MOBILE CARD 5: PRODUCT IMAGERY                                            */}
+          {/* ========================================================================= */}
+          <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs space-y-3.5">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-amber-700 pb-2 border-b border-slate-100">
+              <ImageIcon className="w-4 h-4 text-amber-600" />
+              <span>Product Imagery</span>
+            </div>
+
+            {/* Image Source Tabs */}
+            <div className="flex items-center bg-slate-100 p-1 rounded-xl text-xs">
+              <button
+                type="button"
+                onClick={() => setActiveImageTab('upload')}
+                className={`flex-1 py-1.5 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all ${
+                  activeImageTab === 'upload'
+                    ? 'bg-white text-slate-900 shadow-xs border border-slate-200'
+                    : 'text-slate-600'
+                }`}
+              >
+                <Upload className="w-3.5 h-3.5" />
+                <span>Upload File</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveImageTab('url')}
+                className={`flex-1 py-1.5 rounded-lg font-bold flex items-center justify-center gap-1.5 transition-all ${
+                  activeImageTab === 'url'
+                    ? 'bg-white text-slate-900 shadow-xs border border-slate-200'
+                    : 'text-slate-600'
+                }`}
+              >
+                <Link2 className="w-3.5 h-3.5" />
+                <span>Cloud URL</span>
+              </button>
+            </div>
+
+            {activeImageTab === 'upload' ? (
+              <label className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-blue-200 bg-blue-50/20 hover:bg-blue-50/50 rounded-2xl cursor-pointer transition-colors text-center">
+                <Upload className="w-6 h-6 text-blue-600 mb-1.5" />
+                <p className="text-xs font-bold text-blue-600">
+                  {isUploadingImage ? `Uploading... ${uploadProgress}%` : 'Tap to upload product photos'}
+                </p>
+                <p className="text-[10px] text-slate-400 mt-0.5">JPG, PNG, WebP (Max 10MB)</p>
+                <input
+                  type="file"
+                  multiple
+                  accept="image/*"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                />
+              </label>
+            ) : (
+              <div className="flex items-center gap-2">
+                <input
+                  type="url"
+                  placeholder="Paste HTTPS direct image URL"
+                  value={customImageUrl}
+                  onChange={(e) => setCustomImageUrl(e.target.value)}
+                  className="flex-1 px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-mono text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+                <button
+                  type="button"
+                  onClick={handleAddCloudUrl}
+                  disabled={!customImageUrl.trim()}
+                  className="px-3 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold disabled:opacity-50 shrink-0"
+                >
+                  Add
+                </button>
+              </div>
+            )}
+
+            {/* Thumbnail preview */}
+            {images.length > 0 && (
+              <div className="flex items-center gap-2.5 overflow-x-auto no-scrollbar pt-1">
+                {images.map((img, idx) => (
+                  <div key={idx} className="relative w-16 h-16 rounded-xl overflow-hidden shrink-0 border border-slate-200 bg-slate-50">
+                    <img src={img} alt="" className="w-full h-full object-cover" />
+                    {idx === 0 && (
+                      <span className="absolute bottom-0 inset-x-0 bg-slate-900/80 text-amber-300 text-[8px] font-bold text-center py-0.5">
+                        Primary
+                      </span>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveImage(idx)}
+                      className="absolute top-1 right-1 w-4 h-4 rounded-full bg-slate-900/80 text-white flex items-center justify-center text-[10px] hover:bg-rose-600"
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ========================================================================= */}
+          {/* MOBILE CARD 6: TECHNICAL DESCRIPTION                                      */}
+          {/* ========================================================================= */}
+          <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs space-y-2">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-700 pb-2 border-b border-slate-100">
+              <FileText className="w-4 h-4 text-slate-600" />
+              <span>Technical Description</span>
+            </div>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Enter product description, technical specifications, physical properties, grade certifications..."
+              rows={4}
+              className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 resize-none"
+            />
+          </div>
+
+          {/* ========================================================================= */}
+          {/* MOBILE CARD 7: APPROVAL STATUS & COMPLIANCE                               */}
+          {/* ========================================================================= */}
+          <div className="bg-white rounded-2xl p-4 border border-slate-200/90 shadow-2xs space-y-2.5">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-bold text-slate-800">Initial Listing Status:</span>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-900 border border-amber-300">
+                ⏳ PENDING ADMIN APPROVAL
+              </span>
+            </div>
+            <p className="text-[11px] text-slate-500 leading-relaxed">
+              New listings are reviewed by the catalog compliance team before public marketplace activation.
+            </p>
+          </div>
+
+          {/* Save / Submit Button */}
+          <div className="pt-2">
+            <button
+              type="submit"
+              disabled={isSubmitting || !title.trim() || !price || !unit.trim()}
+              className="w-full py-3.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-xs font-bold rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <Plus className="w-4 h-4 stroke-[2.5]" />
+              <span>{isSubmitting ? 'Submitting Product Listing...' : 'Create & Submit Product'}</span>
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* ================= LAPTOP / DESKTOP ADD PRODUCT (100% Unchanged) ================= */}
+      <div className="hidden md:block w-full pb-16">
+        {/* Outer Card with Dark Slate/Navy Header (Exact Match to Screenshot 3, 4, 5) */}
+        <div className="bg-white rounded-2xl shadow-xl border border-slate-200 overflow-hidden">
+          {/* DARK NAVY HEADER BANNER */}
+          <div className="bg-[#0f172a] text-white p-5 sm:p-6 flex items-center justify-between border-b border-slate-800">
           <div className="flex items-center gap-3.5">
             <div className="w-11 h-11 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-bold shadow-md shrink-0">
               <Package className="w-6 h-6" />
@@ -1049,5 +1672,6 @@ export function AddProductPage() {
         </form>
       </div>
     </div>
+    </>
   );
 }

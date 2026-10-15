@@ -73,19 +73,7 @@ export const step1PersonalSchema = z
 
     confirmPassword: z.string().min(1, 'Please confirm your password'),
 
-    panCardImage: z.custom(
-      (val) => {
-        if (!val) return false;
-        if (typeof val === 'string') return val.trim().length > 0;
-        if (typeof val === 'object') {
-          return Boolean(val.file || val.name || val.url || (val instanceof File));
-        }
-        return false;
-      },
-      {
-        message: 'Please upload your PAN Card document (Max 10MB).',
-      }
-    ),
+    panCardImage: z.any().optional(),
 
     gstin: z
       .string()

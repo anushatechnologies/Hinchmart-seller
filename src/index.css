@@ -44,6 +44,15 @@
   .overflow-x-auto {
     -webkit-overflow-scrolling: touch;
   }
+
+  /* Hide scrollbar for Chrome, Safari, Opera and Firefox/Edge */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
 }
 
 @layer components {

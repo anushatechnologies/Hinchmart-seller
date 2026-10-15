@@ -28,11 +28,15 @@ import {
   Layers,
   Store,
   LifeBuoy,
+  User,
+  Home,
 } from 'lucide-react';
 import { BrandLogo } from '../common/BrandLogo';
+import { MobileHeaderLogo } from '../common/MobileHeaderLogo';
 import { NAV_GROUPS } from '../../constants/navigation';
 import { useUIStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore';
+import { useSellerProfile } from '../../hooks/useSellerProfile';
 import { useOrders } from '../../hooks/useOrders';
 import { useEnquiries } from '../../hooks/useEnquiries';
 import { useInventory } from '../../hooks/useInventory';
@@ -65,6 +69,8 @@ const ICON_MAP = {
 export function Sidebar() {
   const location = useLocation();
   const { sidebarOpen, toggleSidebar, mobileMenuOpen, setMobileMenuOpen } = useUIStore();
+  const { user } = useAuthStore();
+  const { profile } = useSellerProfile();
 
   // Real counts for live badges
   const { orders = [] } = useOrders();
@@ -117,23 +123,116 @@ export function Sidebar() {
           // Desktop collapsible width
           sidebarOpen ? 'w-64' : 'w-20',
           // Mobile slide-in
-          mobileMenuOpen ? 'translate-x-0 !w-64' : '-translate-x-full md:translate-x-0'
+          mobileMenuOpen ? 'translate-x-0 !w-72' : '-translate-x-full md:translate-x-0'
         )}
       >
-        {/* Brand Header */}
-        <div className={cn(
-          'flex h-16 shrink-0 items-center border-b border-slate-800/80 bg-[#0B132B] transition-all',
-          isExpanded ? 'justify-between pl-3 pr-2' : 'justify-center px-2'
-        )}>
-          {isExpanded ? (
-            <>
-              <div className="flex items-center overflow-hidden">
-                <BrandLogo size="sidebar" theme="dark" to="/seller/dashboard" showBadge={true} badgeText="SELLER WEB HUB" />
-              </div>
+        {/* ================= MOBILE SIDEBAR DRAWER (Matches Screen 2: Sidebar Menu Mobile) ================= */}
+        <div className="flex md:hidden flex-col h-full bg-[#0A1E3F] text-slate-200">
+          {/* Top Brand Header */}
+          <div className="flex h-16 shrink-0 items-center justify-between px-4 border-b border-slate-800/60 bg-[#091A36]">
+            <MobileHeaderLogo to="/seller/dashboard" />
+            <button
+              type="button"
+              onClick={() => setMobileMenuOpen(false)}
+              className="p-1.5 text-white hover:bg-white/10 rounded-lg cursor-pointer"
+              aria-label="Close Menu"
+            >
+              <X className="w-6 h-6 stroke-[2]" />
+            </button>
+          </div>
 
-              <div className="flex items-center gap-1">
-                {/* Desktop Collapse Toggle */}
-                <button
+          {/* User Profile Bar */}
+          <div className="p-4 flex items-center gap-3 border-b border-slate-800/60">
+            <div className="w-11 h-11 rounded-full bg-slate-700/80 text-white flex items-center justify-center shrink-0 border border-slate-600/50">
+              <User className="w-5 h-5 text-slate-300" />
+            </div>
+            <div className="min-w-0">
+              <h3 className="text-sm font-bold text-white truncate">
+                {profile?.name || user?.name || 'Seller'}
+              </h3>
+              <p className="text-[11px] text-blue-200/60 truncate">
+                {user?.email || profile?.email || ''}
+              </p>
+            </div>
+          </div>
+
+          {/* Navigation Links matching Screen 2 */}
+          <div className="flex-1 overflow-y-auto px-3 py-3 space-y-1.5 custom-scrollbar">
+            {[
+              { label: 'Dashboard', to: '/seller/dashboard', icon: Home },
+              { label: 'Products', to: '/seller/products', icon: Package },
+              { label: 'Orders', to: '/seller/orders', icon: FileText, badge: newOrdersCount > 0 ? newOrdersCount : undefined },
+              { label: 'Customers', to: '/seller/customers', icon: Users },
+              { label: 'Inventory', to: '/seller/inventory', icon: Warehouse },
+              { label: 'Reports', to: '/seller/analytics', icon: BarChart3 },
+              { label: 'Payments', to: '/seller/payments', icon: CreditCard },
+              { label: 'Settings', to: '/seller/settings', icon: Settings },
+              { label: 'Help & Support', to: '/seller/support', icon: HelpCircle },
+            ].map((item) => {
+              const Icon = item.icon;
+              const isActive =
+                item.to === '/seller/dashboard'
+                  ? location.pathname === '/seller/dashboard' || location.pathname === '/seller'
+                  : location.pathname.startsWith(item.to);
+
+              return (
+                <NavLink
+                  key={item.label}
+                  to={item.to}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
+                    isActive
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-300 hover:text-white hover:bg-slate-800/50'
+                  }`}
+                >
+                  <div className="flex items-center gap-3">
+                    <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                    <span>{item.label}</span>
+                  </div>
+                  {item.badge && (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-red-500 text-white shadow-xs">
+                      {item.badge}
+                    </span>
+                  )}
+                </NavLink>
+              );
+            })}
+          </div>
+
+          {/* Bottom Logout */}
+          <div className="p-4 border-t border-slate-800/60 bg-[#08152B]">
+            <button
+              type="button"
+              onClick={async () => {
+                setMobileMenuOpen(false);
+                await useAuthStore.getState().logout();
+                window.location.href = '/login';
+              }}
+              className="flex items-center gap-2.5 text-xs font-bold text-red-500 hover:text-red-400 transition-colors w-full py-1 cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Logout</span>
+            </button>
+          </div>
+        </div>
+
+        {/* ================= DESKTOP SIDEBAR (100% Unchanged) ================= */}
+        <div className="hidden md:flex flex-col h-full w-full">
+          {/* Brand Header */}
+          <div className={cn(
+            'flex h-16 shrink-0 items-center border-b border-slate-800/80 bg-[#0B132B] transition-all',
+            isExpanded ? 'justify-between pl-3 pr-2' : 'justify-center px-2'
+          )}>
+            {isExpanded ? (
+              <>
+                <div className="flex items-center overflow-hidden">
+                  <BrandLogo size="sidebar" theme="dark" to="/seller/dashboard" showBadge={true} badgeText="SELLER WEB HUB" />
+                </div>
+
+                <div className="flex items-center gap-1">
+                  {/* Desktop Collapse Toggle */}
+                  <button
                   type="button"
                   onClick={toggleSidebar}
                   className="hidden md:flex p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800/70 transition-colors cursor-pointer"
@@ -368,6 +467,7 @@ export function Sidebar() {
             <LogOut className="w-4 h-4 shrink-0 text-slate-400 group-hover:text-rose-400" />
             {isExpanded && <span>Sign Out</span>}
           </button>
+        </div>
         </div>
       </aside>
     </>

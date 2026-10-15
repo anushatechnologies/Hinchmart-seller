@@ -83,6 +83,13 @@ export function useOrder(id) {
         type: 'success',
       });
     },
+    onError: (err) => {
+      addToast({
+        title: 'Status Update Failed',
+        message: err.message,
+        type: 'error',
+      });
+    },
   });
 
   const generateInvoiceMutation = useMutation({

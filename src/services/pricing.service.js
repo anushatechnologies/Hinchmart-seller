@@ -64,16 +64,30 @@ export const pricingService = {
     });
 
     const targetProductIds = matchingProducts.map(p => Number(p.id) || p.id);
-    const normAdjType = (adjustmentType || '').toLowerCase().includes('percentage') ? 'PERCENTAGE' : 'FIXED';
-    const normApplyTo = (applyTo || '').toUpperCase() === 'MRP' ? 'MRP' : 'PRICE';
+    
+    // Backend Enum: percentage_increase, percentage_decrease, fixed_increase, fixed_decrease
+    let normAdjType = 'percentage_increase';
+    const isDecrease = String(adjustmentType || '').toLowerCase().includes('decrease') || Number(value) < 0;
+    const isFixed = String(adjustmentType || '').toLowerCase().includes('fixed');
+    if (isFixed) {
+      normAdjType = isDecrease ? 'fixed_decrease' : 'fixed_increase';
+    } else {
+      normAdjType = isDecrease ? 'percentage_decrease' : 'percentage_increase';
+    }
+
+    // Backend Enum: selling_price, mrp, both
+    const rawApply = String(applyTo || '').toLowerCase();
+    const normApplyTo = rawApply === 'mrp' ? 'mrp' : (rawApply === 'both' ? 'both' : 'selling_price');
 
     if (!USE_MOCK_API && canAccessSellerApi('/api/seller/pricing/bulk-adjust')) {
       try {
         const response = await apiClient.post('/api/seller/pricing/bulk-adjust', {
-          productIds: targetProductIds,
           adjustmentType: normAdjType,
-          adjustmentValue: Number(value),
           applyTo: normApplyTo,
+          value: Math.abs(Number(value) || 0),
+          categoryId: categoryId && categoryId !== 'All' ? Number(categoryId) || undefined : undefined,
+          brandId: brand && brand !== 'All' ? Number(brand) || undefined : undefined,
+          productIds: targetProductIds.length > 0 ? targetProductIds : undefined,
         });
         const data = response.data?.data || response.data;
         if (data) return data;

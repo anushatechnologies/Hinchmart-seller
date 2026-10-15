@@ -93,21 +93,29 @@ import { useAuthStore } from '../store/authStore';
 export function AppRoutes() {
   const { isAuthenticated } = useAuthStore();
   const isApproved = typeof localStorage !== 'undefined' && localStorage.getItem('seller_approved') === 'true';
+  const isPending =
+    typeof localStorage !== 'undefined' &&
+    (localStorage.getItem('seller_onboarding_status') === 'PENDING' ||
+      localStorage.getItem('seller_approved') === 'false');
+  const hasActiveSession = isAuthenticated || isPending;
 
   return (
     <Routes>
       {/* Root redirect */}
       <Route
         path="/"
-        element={<Navigate to={isAuthenticated ? (isApproved ? '/seller/dashboard' : '/pending-approval') : '/login'} replace />}
+        element={<Navigate to={hasActiveSession ? (isApproved ? '/seller/dashboard' : '/pending-approval') : '/login'} replace />}
       />
 
       {/* Public Auth Routes */}
       <Route
         path="/login"
-        element={isAuthenticated ? (isApproved ? <Navigate to="/seller/dashboard" replace /> : <Navigate to="/pending-approval" replace />) : <LoginPage />}
+        element={hasActiveSession ? (isApproved ? <Navigate to="/seller/dashboard" replace /> : <Navigate to="/pending-approval" replace />) : <LoginPage />}
       />
-      <Route path="/register" element={<RegisterPage />} />
+      <Route
+        path="/register"
+        element={hasActiveSession ? (isApproved ? <Navigate to="/seller/dashboard" replace /> : <Navigate to="/pending-approval" replace />) : <RegisterPage />}
+      />
       <Route path="/verify-otp" element={<VerifyOtpPage />} />
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/pending-approval" element={<PendingApprovalPage />} />

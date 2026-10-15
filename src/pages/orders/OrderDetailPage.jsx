@@ -268,7 +268,7 @@ export function OrderDetailPage() {
           )}
 
           {/* Pending State */}
-          {['New', 'Pending'].includes(order.orderStatus) && (
+          {['New', 'Pending', 'Placed'].includes(order.orderStatus) && (
             <>
               <Button
                 variant="danger"
@@ -362,28 +362,19 @@ export function OrderDetailPage() {
               >
                 Live Tracking
               </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={() => handleAdvanceStatus('Delivered', 'Material arrived and unloaded at project site.')}
-                isLoading={isUpdating}
-                leftIcon={CheckCircle2}
-              >
-                Mark Delivered at Site
-              </Button>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 border border-blue-200 text-xs font-semibold text-blue-800">
+                <Clock className="w-3.5 h-3.5 text-blue-600" />
+                <span>In Transit (Delivery confirmed by Admin / Courier)</span>
+              </div>
             </>
           )}
 
-          {/* Delivered State */}
+          {/* Delivered State (Read-only for Seller) */}
           {order.orderStatus === 'Delivered' && (
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={() => setPodModalOpen(true)}
-              leftIcon={CheckSquare}
-            >
-              Confirm POD & Complete
-            </Button>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-50 border border-emerald-300 text-xs font-bold text-emerald-800">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              <span>Delivered ✓ (7-Day Settlement Window Active)</span>
+            </div>
           )}
 
           {/* Completed State */}
@@ -528,6 +519,30 @@ export function OrderDetailPage() {
         )}
       </div>
 
+      {/* Payout & Fulfilment Policy Banner */}
+      <div className="p-4 bg-gradient-to-r from-slate-50 to-emerald-50/30 rounded-xl border border-slate-200/90 shadow-2xs space-y-2">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="w-4 h-4 text-emerald-700" />
+          <h4 className="text-xs font-bold text-slate-900 tracking-tight">
+            Fulfilment & Payout Settlement Policy
+          </h4>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-[11px] text-slate-600">
+          <div className="p-2.5 bg-white rounded-lg border border-slate-200/70 space-y-0.5">
+            <span className="font-bold text-slate-800 block">Vendor Own Products</span>
+            <p>You receive 100% of the item amount (0% platform commission). Platform coupons are absorbed by HinchMart.</p>
+          </div>
+          <div className="p-2.5 bg-white rounded-lg border border-slate-200/70 space-y-0.5">
+            <span className="font-bold text-slate-800 block">Consignment Stock Fulfilment</span>
+            <p>For HinchStore products routed to your store, you earn the platform holding fee per item settlement rules.</p>
+          </div>
+          <div className="p-2.5 bg-white rounded-lg border border-slate-200/70 space-y-0.5">
+            <span className="font-bold text-slate-800 block">Settlement Timeline</span>
+            <p>Only administrators mark orders Delivered. The 7-day payout window starts upon delivery confirmation.</p>
+          </div>
+        </div>
+      </div>
+
       {/* 4. Complete Order Lifecycle Progression Timeline */}
       <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-xs space-y-3">
         <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider">
@@ -541,7 +556,7 @@ export function OrderDetailPage() {
             { status: 'Ready for Dispatch', desc: 'Invoice Attached' },
             { status: 'Dispatched', desc: 'Carrier Loaded' },
             { status: 'In Transit', desc: 'En Route Site' },
-            { status: 'Delivered', desc: 'Delivered at Site' },
+            { status: 'Delivered', desc: 'Delivered (Admin / Courier)' },
             { status: 'Completed', desc: 'POD Confirmed' },
           ].map((step) => {
             const isCompletedStep =
@@ -964,7 +979,7 @@ export function OrderDetailPage() {
           <div className="flex justify-between items-start border-b-2 border-slate-900 pb-4">
             <div>
               <h2 className="text-lg font-black text-slate-900">
-                {profile?.companyName || 'Seller Enterprise'}
+                {profile?.companyName || user?.storeName || user?.companyName || profile?.name || 'Seller'}
               </h2>
               {profile?.address?.completeAddress && (
                 <p className="text-slate-600">

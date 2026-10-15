@@ -38,12 +38,19 @@ export function normalizeSellerProduct(p) {
     rawStatus === 'DELETED_BY_ADMIN' ||
     Boolean(p.deletedByAdmin);
 
+  const isApproved =
+    approval === 'APPROVED' ||
+    rawStatus === 'APPROVED' ||
+    rawStatus === 'ACTIVE' ||
+    rawStatus === 'LIVE' ||
+    isActive;
+
   let status = 'PENDING';
   if (approval === 'REJECTED' || rawStatus === 'REJECTED') {
     status = 'REJECTED';
   } else if (isDeletedByAdmin) {
     status = 'DELETED_BY_ADMIN';
-  } else if (approval === 'APPROVED' || (rawStatus === 'APPROVED' && approval !== 'PENDING')) {
+  } else if (isApproved) {
     status = 'APPROVED';
   } else if (approval === 'INACTIVE' || rawStatus === 'INACTIVE') {
     status = 'INACTIVE';
@@ -268,7 +275,7 @@ export const sellerProductService = {
         }
 
         let match = liveById.get(pIdStr);
-        if (!match && !numericId) {
+        if (!match) {
           match = (pSku ? liveBySku.get(pSku) : null) || (pTitle ? liveByTitle.get(pTitle) : null);
         }
 
@@ -330,14 +337,27 @@ export const sellerProductService = {
         }
 
         if (match) {
-          const matchStatus = String(match.status || match.approvalStatus || '').toUpperCase();
-          if (matchStatus === 'APPROVED') {
+          const matchApproval = String(match.approvalStatus || '').toUpperCase();
+          const matchRawStatus = String(match.status || '').toUpperCase();
+          const isMatchApproved =
+            matchApproval === 'APPROVED' ||
+            matchRawStatus === 'APPROVED' ||
+            matchRawStatus === 'ACTIVE' ||
+            matchRawStatus === 'LIVE' ||
+            Boolean(match.active);
+
+          if (isMatchApproved) {
             p.status = 'APPROVED';
             p.approvalStatus = 'APPROVED';
             p.active = true;
-          } else if (matchStatus === 'REJECTED') {
+          } else if (matchApproval === 'REJECTED' || matchRawStatus === 'REJECTED') {
             p.status = 'REJECTED';
             p.approvalStatus = 'REJECTED';
+            p.active = false;
+            if (match.rejectionReason) p.rejectionReason = match.rejectionReason;
+          } else if (matchApproval === 'INACTIVE' || matchRawStatus === 'INACTIVE') {
+            p.status = 'INACTIVE';
+            p.approvalStatus = 'INACTIVE';
             p.active = false;
           } else {
             p.status = 'PENDING';
@@ -391,8 +411,21 @@ export const sellerProductService = {
         (numericSellerId > 0 && numLpSeller === numericSellerId);
 
       if (isOwnerSeller) {
-        const lpStatus = String(lp.status || lp.approvalStatus || 'PENDING').toUpperCase();
-        const finalStatus = lpStatus === 'APPROVED' ? 'APPROVED' : (lpStatus === 'REJECTED' ? 'REJECTED' : (lpStatus === 'INACTIVE' ? 'INACTIVE' : 'PENDING'));
+        const lpApproval = String(lp.approvalStatus || '').toUpperCase();
+        const lpRawStatus = String(lp.status || '').toUpperCase();
+        const isLpApproved =
+          lpApproval === 'APPROVED' ||
+          lpRawStatus === 'APPROVED' ||
+          lpRawStatus === 'ACTIVE' ||
+          lpRawStatus === 'LIVE' ||
+          Boolean(lp.active);
+
+        const finalStatus = isLpApproved
+          ? 'APPROVED'
+          : (lpApproval === 'REJECTED' || lpRawStatus === 'REJECTED'
+            ? 'REJECTED'
+            : (lpApproval === 'INACTIVE' || lpRawStatus === 'INACTIVE' ? 'INACTIVE' : 'PENDING'));
+
         backendSellerList.push(normalizeSellerProduct({
           ...lp,
           status: finalStatus,
@@ -445,7 +478,16 @@ export const sellerProductService = {
           });
         } else {
           // Live backend status takes priority (e.g. PENDING over old local REJECTED)
-          mergedMap.set(matchedKey, { ...p, ...existing });
+          const userImgs = getCleanProductImages(p);
+          const backendImgs = getCleanProductImages(existing);
+          const finalImgs = userImgs.length > 0 ? userImgs : backendImgs;
+          mergedMap.set(matchedKey, {
+            ...p,
+            ...existing,
+            images: finalImgs,
+            imageUrl: finalImgs[0] || null,
+            image: finalImgs[0] || null,
+          });
         }
       } else {
         if (p.status === 'DELETED_BY_ADMIN' || p.approvalStatus === 'DELETED_BY_ADMIN' || p.deletedByAdmin) {
@@ -837,21 +879,28 @@ export const sellerProductService = {
       try {
         let response = null;
         try {
-          response = await apiClient.get(`/api/products/${id}`, { timeout: 3500 });
-        } catch (err) {
-          const status = err?.response?.status || err?.response?.data?.statusCode;
-          const msg = err?.response?.data?.message || err?.message || '';
+          // 1. Try dedicated seller endpoint: GET /api/seller/products/{id}
+          response = await apiClient.get(`/api/seller/products/${id}`, { timeout: 3500 });
+        } catch (sellerErr) {
+          // 2. Try public catalog endpoint: GET /api/products/{id}
+          try {
+            response = await apiClient.get(`/api/products/${id}`, { timeout: 3500 });
+          } catch (err) {
+            const status = err?.response?.status || err?.response?.data?.statusCode;
+            const msg = err?.response?.data?.message || err?.message || '';
 
-          // If public endpoint returns 404, the product is NOT public yet (it is either PENDING or REJECTED by admin).
-          // NEVER purge or delete from seller store! Preserve local product with its current status.
-          if (status === 404 || msg.toLowerCase().includes('not found')) {
-            if (localProduct) {
-              return normalizeSellerProduct(localProduct);
+            // If public endpoint returns 404, the product is NOT public yet (it is either PENDING or REJECTED by admin).
+            // NEVER purge or delete from seller store! Preserve local product with its current status.
+            if (status === 404 || msg.toLowerCase().includes('not found')) {
+              if (localProduct) {
+                return normalizeSellerProduct(localProduct);
+              }
             }
           }
+        }
 
           // If query by ID failed with other error and local product has SKU or title, try searching catalog
-          if (localProduct?.title) {
+          if (!response && localProduct?.title) {
             try {
               const searchRes = await apiClient.get('/api/products', { params: { search: localProduct.title, limit: 5 }, timeout: 3500 });
               const prods = searchRes.data?.data || searchRes.data || [];
@@ -863,7 +912,6 @@ export const sellerProductService = {
               if (found) response = { data: found };
             } catch (_) {}
           }
-        }
 
         const rawData = response?.data?.data || response?.data;
         if (rawData && (rawData.id || rawData.productId)) {
@@ -998,10 +1046,10 @@ export const sellerProductService = {
       active: false,
       status: 'PENDING',
       approvalStatus: 'PENDING',
-      sellerId: numericSellerId,
-      vendorId: numericSellerId,
-      storeId: 1, // Store 1 in Spring Boot MySQL catalog
     };
+
+    // Never send sellerId or storeId in body - backend resolves them from the authenticated seller token
+    const { sellerId: _s, vendorId: _v, storeId: _st, ...apiCreatePayload } = payload;
 
     let realProdId = null;
     let createdItem = null;
@@ -1009,15 +1057,15 @@ export const sellerProductService = {
 
     if (!USE_MOCK_API) {
       try {
-        // 1. Try official POST /api/seller/products (attaches Authorization Bearer token & X-Seller-Id)
+        // 1. Official POST /api/seller/products (identity resolved from Bearer token)
         let response = null;
         try {
-          response = await apiClient.post('/api/seller/products', payload);
+          response = await apiClient.post('/api/seller/products', apiCreatePayload);
         } catch (sellerErr) {
           syncErrorMsg = sellerErr.response?.data?.message || sellerErr.response?.statusText || sellerErr.message;
           // Fallback 1: Try general product endpoint POST /api/products
           try {
-            response = await apiClient.post('/api/products', payload);
+            response = await apiClient.post('/api/products', apiCreatePayload);
             syncErrorMsg = null; // Succeeded on fallback
           } catch (prodErr) {
             syncErrorMsg = prodErr.response?.data?.message || `HTTP ${prodErr.response?.status}: ${prodErr.response?.statusText || prodErr.message}`;
@@ -1216,25 +1264,24 @@ export const sellerProductService = {
       deletedByAdmin: false,
       rejectionReason: isResubmission ? null : (updates.rejectionReason ?? localProd.rejectionReason),
       reSubmittedAt: isResubmission ? new Date().toISOString() : (updates.reSubmittedAt || localProd.reSubmittedAt),
-      sellerId: numericSellerId,
-      vendorId: numericSellerId,
-      storeId: 1,
     };
+
+    // Never send sellerId or storeId - backend identifies seller from token
+    const { sellerId: _s, vendorId: _v, storeId: _st, ...apiUpdatePayload } = payload;
 
     let createdItem = null;
     if (!USE_MOCK_API) {
       try {
         let response = null;
         try {
-          response = await apiClient.put(`/api/seller/products/${id}`, payload);
+          response = await apiClient.put(`/api/seller/products/${id}`, apiUpdatePayload);
         } catch (putErr) {
           try {
-            response = await apiClient.put(`/api/products/${id}`, payload);
+            response = await apiClient.put(`/api/products/${id}`, apiUpdatePayload);
           } catch (pErr) {
-            // When PUT fails (e.g. 404 because product was removed from backend DB or was only in mock),
-            // submit as a fresh seller product via POST /api/seller/products so it enters the Admin review queue!
+            // When PUT fails, submit as fresh product via POST /api/seller/products
             try {
-              response = await apiClient.post('/api/seller/products', payload);
+              response = await apiClient.post('/api/seller/products', apiUpdatePayload);
             } catch (postErr) {
               console.warn('Backend POST /api/seller/products notice:', postErr?.response?.data || postErr.message);
             }
@@ -1307,6 +1354,24 @@ export const sellerProductService = {
     const status = active ? 'APPROVED' : 'INACTIVE';
     const updated = db.updateSellerProduct(sellerId, id, { active, status });
     return updated ? normalizeSellerProduct(updated) : null;
+  },
+
+  /**
+   * 4.1 PATCH /api/seller/products/{id}/stock
+   * Body: { stockQty }
+   */
+  async updateStock(id, stockQty) {
+    const cleanQty = Math.max(0, parseInt(stockQty, 10) || 0);
+    const numericId = Number(id) || id;
+    if (!USE_MOCK_API) {
+      try {
+        await apiClient.patch(`/api/seller/products/${numericId}/stock`, { stockQty: cleanQty });
+      } catch (err) {
+        console.warn('PATCH /api/seller/products/{id}/stock notice:', err.message);
+      }
+    }
+    db.updateSellerStock(null, id, cleanQty);
+    return { id, stockQty: cleanQty, stock: cleanQty };
   },
 
   /**

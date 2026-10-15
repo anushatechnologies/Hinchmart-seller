@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
 import {
   Search,
   Bell,
@@ -15,6 +15,7 @@ import {
   Clock,
   ExternalLink,
   Mic,
+  ArrowLeft,
 } from 'lucide-react';
 import { useUIStore } from '../../store/uiStore';
 import { useAuthStore } from '../../store/authStore';
@@ -22,10 +23,16 @@ import { useNotifications } from '../../hooks/useNotifications';
 import { useSellerProfile } from '../../hooks/useSellerProfile';
 import { HeaderSearch } from './HeaderSearch';
 import { BrandLogo } from '../common/BrandLogo';
+import { MobileHeaderLogo } from '../common/MobileHeaderLogo';
 import { formatRelativeTime, formatNameFromEmail } from '../../utils/formatters';
 
 export function Header() {
   const navigate = useNavigate();
+  const location = useLocation();
+  const isAddProductPage = location.pathname.includes('/products/add');
+  const isSettingsPage = location.pathname.includes('/settings');
+  const isPaymentsPage = location.pathname.includes('/payments');
+
   const { toggleMobileMenu } = useUIStore();
   const { user, logout } = useAuthStore();
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
@@ -72,7 +79,7 @@ export function Header() {
     }
   }
 
-  const sellerDisplayName = rawCompanyName || (authEmail ? `${formatNameFromEmail(authEmail)} Enterprise` : 'Seller Enterprise');
+  const sellerDisplayName = rawCompanyName || (authEmail ? formatNameFromEmail(authEmail) : 'Seller');
   const sellerContactName = rawContactName || (authEmail ? formatNameFromEmail(authEmail) : 'Seller Admin');
   const sellerMonogram = (rawContactName || rawCompanyName || 'SE')
     .split(' ')
@@ -83,31 +90,79 @@ export function Header() {
     .toUpperCase() || 'SE';
 
   return (
-    <header className="sticky top-0 z-30 flex h-16 w-full items-center justify-between border-b border-slate-200/80 bg-white/95 backdrop-blur-md px-4 sm:px-6 shadow-xs header-gradient-border">
-      {/* Left: Mobile Toggle + Logo + Global Search */}
-      <div className="flex items-center gap-3 md:gap-4 flex-1">
-        <button
-          type="button"
-          onClick={toggleMobileMenu}
-          className="rounded-md p-2 text-slate-500 hover:bg-slate-100 md:hidden focus:outline-none cursor-pointer"
-          aria-label="Open mobile menu"
-        >
-          <Menu className="w-5 h-5" />
-        </button>
+    <header className="sticky top-0 z-30 flex h-14 md:h-16 w-full items-center justify-between bg-[#0C3A70] md:bg-white/95 border-b border-[#0C3A70] md:border-slate-200/80 md:backdrop-blur-md px-3.5 sm:px-6 shadow-xs md:header-gradient-border">
+      {/* ================= PHONE VIEW HEADER (Matches Phone Mockup Exactly) ================= */}
+      <div className="flex md:hidden items-center justify-between w-full">
+        {/* Left: Back Arrow OR Hamburger Menu */}
+        {isAddProductPage || isSettingsPage ? (
+          <button
+            type="button"
+            onClick={() => navigate(-1)}
+            className="rounded-md p-1.5 text-white hover:bg-white/10 focus:outline-none cursor-pointer"
+            aria-label="Go Back"
+          >
+            <ArrowLeft className="w-6 h-6 stroke-[2]" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={toggleMobileMenu}
+            className="rounded-md p-1.5 text-white hover:bg-white/10 focus:outline-none cursor-pointer"
+            aria-label="Open mobile menu"
+          >
+            <Menu className="w-6 h-6 stroke-[2]" />
+          </button>
+        )}
 
-        {/* Brand Logo (Visible on mobile header) */}
-        <div className="md:hidden">
-          <BrandLogo size="navbar" theme="light" to="/seller/dashboard" />
+        {/* Center: Title OR Brand Logo */}
+        <div className="flex items-center justify-center">
+          {isAddProductPage ? (
+            <span className="text-base font-bold text-white tracking-tight">Add Product</span>
+          ) : isSettingsPage ? (
+            <span className="text-base font-bold text-white tracking-tight">Settings</span>
+          ) : isPaymentsPage ? (
+            <div className="flex items-center gap-2">
+              <svg className="w-5 h-5 drop-shadow-xs" viewBox="0 0 36 36" fill="none">
+                <rect x="2" y="31" width="32" height="2" rx="1" fill="#93c5fd" />
+                <rect x="6" y="14" width="6" height="17" fill="#ffffff" />
+                <rect x="15" y="8" width="7" height="23" fill="#ffffff" />
+                <rect x="25" y="16" width="5" height="15" fill="#ffffff" />
+              </svg>
+              <span className="text-base font-bold text-white tracking-tight">Payments</span>
+            </div>
+          ) : (
+            <MobileHeaderLogo to="/seller/dashboard" />
+          )}
         </div>
 
+        {/* Right: Notifications Bell OR Spacer */}
+        {isAddProductPage || isSettingsPage ? (
+          <div className="w-9" />
+        ) : (
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => navigate('/seller/notifications')}
+              className="relative p-1.5 text-white hover:bg-white/10 rounded-lg focus:outline-none cursor-pointer"
+              aria-label="Notifications"
+            >
+              <Bell className="w-5 h-5 stroke-[2]" />
+              <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-red-500 ring-2 ring-[#0C3A70]" />
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* ================= LAPTOP / DESKTOP HEADER (Unchanged) ================= */}
+      <div className="hidden md:flex items-center gap-3 md:gap-4 flex-1">
         {/* Real Production Header Search Bar with Voice Mic */}
-        <div className="hidden sm:flex items-center w-full max-w-xl lg:max-w-2xl">
+        <div className="flex items-center w-full max-w-xl lg:max-w-2xl">
           <HeaderSearch />
         </div>
       </div>
 
-      {/* Right: Support + Notifications + Company Avatar */}
-      <div className="flex items-center gap-2 sm:gap-3.5">
+      {/* Desktop Right: Support + Notifications + Company Avatar */}
+      <div className="hidden md:flex items-center gap-2 sm:gap-3.5">
         {/* Mobile Search Icon Toggle */}
         <button
           type="button"

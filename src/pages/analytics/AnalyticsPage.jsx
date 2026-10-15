@@ -25,6 +25,7 @@ import {
   Eye,
   Percent,
   Layers,
+  ChevronRight,
 } from 'lucide-react';
 import { useAnalytics } from '../../hooks/useAnalytics';
 import { useProducts } from '../../hooks/useProducts';
@@ -57,10 +58,113 @@ export function AnalyticsPage() {
     .sort((a, b) => (b.totalSales || 0) - (a.totalSales || 0))
     .slice(0, 5);
 
+  const mobileChartData = useMemo(() => {
+    if (revenueData && revenueData.length > 0) {
+      return revenueData.map((r) => ({
+        date: r.month || r.date || '',
+        value: Number(r.revenue || 0),
+      }));
+    }
+    return [];
+  }, [revenueData]);
+
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+    <>
+      {/* ================= PHONE VIEW REPORTS (Matches Phone Screenshot 8 Exactly) ================= */}
+      <div className="block md:hidden space-y-3.5 pb-2">
+        {/* Sales Report Card */}
+        <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-2xs">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-slate-900">Sales Report</h3>
+            <div className="relative">
+              <select
+                value={timeRange}
+                onChange={(e) => setTimeRange(e.target.value)}
+                className="text-xs bg-white border border-slate-200 text-slate-700 py-1 px-2.5 rounded-lg focus:outline-none appearance-none pr-6 cursor-pointer shadow-2xs"
+              >
+                <option value="30d">This Month</option>
+                <option value="7d">Last 7 Days</option>
+                <option value="90d">Last 90 Days</option>
+                <option value="1y">This Year</option>
+              </select>
+              <ChevronRight className="w-3 h-3 text-slate-400 absolute right-2 top-2.5 pointer-events-none rotate-90" />
+            </div>
+          </div>
+
+          <div className="mt-2.5 flex items-baseline gap-2">
+            <span className="text-2xl font-bold text-slate-900 tracking-tight">
+              {formatCurrency(kpis.totalRevenue || 0)}
+            </span>
+            <span className="text-[11px] font-semibold bg-[#ECFDF5] text-emerald-600 px-2 py-0.5 rounded-full inline-flex items-center gap-0.5">
+              <TrendingUp className="w-3 h-3" />
+              {kpis.revenueGrowth != null ? `${kpis.revenueGrowth >= 0 ? '+' : ''}${kpis.revenueGrowth}%` : '+0%'}
+            </span>
+          </div>
+
+          {/* Smooth Blue Gradient Chart */}
+          <div className="h-44 w-full mt-3">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart
+                data={
+                  mobileChartData.length > 0
+                    ? mobileChartData
+                    : [
+                        { date: '1 Oct', value: 0 },
+                        { date: '31 Oct', value: 0 },
+                      ]
+                }
+                margin={{ top: 10, right: 10, left: -25, bottom: 0 }}
+              >
+                <defs>
+                  <linearGradient id="reportsSalesGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#2563eb" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="#2563eb" stopOpacity={0.0} />
+                  </linearGradient>
+                </defs>
+                <XAxis
+                  dataKey="date"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 9.5, fill: '#94a3b8' }}
+                />
+                <Tooltip
+                  formatter={(val) => [`₹${val.toLocaleString('en-IN')}`, 'Sales']}
+                  contentStyle={{ borderRadius: '8px', fontSize: '11px', border: '1px solid #e2e8f0' }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="value"
+                  stroke="#2563eb"
+                  strokeWidth={2.5}
+                  fillOpacity={1}
+                  fill="url(#reportsSalesGrad)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* 3 Metric Summary Cards in a Row */}
+        <div className="grid grid-cols-3 gap-2.5">
+          <div className="bg-white rounded-xl p-3 border border-slate-100 shadow-2xs text-center">
+            <p className="text-lg font-bold text-slate-900">{kpis.totalOrders ?? 0}</p>
+            <p className="text-[10px] text-slate-500 font-medium mt-0.5">Total Orders</p>
+          </div>
+          <div className="bg-white rounded-xl p-3 border border-slate-100 shadow-2xs text-center">
+            <p className="text-lg font-bold text-slate-900">{products.length}</p>
+            <p className="text-[10px] text-slate-500 font-medium mt-0.5">Total Products</p>
+          </div>
+          <div className="bg-white rounded-xl p-3 border border-slate-100 shadow-2xs text-center">
+            <p className="text-lg font-bold text-slate-900">{kpis.newCustomers ?? kpis.totalCustomers ?? 0}</p>
+            <p className="text-[10px] text-slate-500 font-medium mt-0.5">New Customers</p>
+          </div>
+        </div>
+      </div>
+
+      {/* ================= LAPTOP / DESKTOP REPORTS (100% Unchanged) ================= */}
+      <div className="hidden md:block space-y-6">
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
         <div>
           <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
             Commercial Analytics & Performance Reports
@@ -306,5 +410,6 @@ export function AnalyticsPage() {
         </div>
       </div>
     </div>
+    </>
   );
 }

@@ -36,19 +36,15 @@ export const SellerProtectedRoute = ({ children, requiredRole = 'SELLER' }) => {
     return <Navigate to="/seller/onboarding" replace />;
   }
 
-  // 3. Admin Approval Check: Strictly verify approval status
-  const isExplicitlyPending =
-    localStorage.getItem('seller_approved') === 'false' ||
-    ['PENDING', 'PENDING_REVIEW'].includes(String(sellerProfile?.verificationStatus || '').toUpperCase());
+  // 3. Admin Approval Check: Verify approval status
+  const hasApprovedFlag = typeof localStorage !== 'undefined' && localStorage.getItem('seller_approved') === 'true';
 
   const isApproved =
-    !isExplicitlyPending && (
-      localStorage.getItem('seller_approved') === 'true' ||
-      sellerProfile?.verified === true ||
-      ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(String(sellerProfile?.verificationStatus || '').toUpperCase()) ||
-      ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(String(sellerProfile?.onboardingStatus || '').toUpperCase()) ||
-      ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(String(sellerProfile?.status || '').toUpperCase())
-    );
+    hasApprovedFlag ||
+    sellerProfile?.verified === true ||
+    ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(String(sellerProfile?.verificationStatus || '').toUpperCase()) ||
+    ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(String(sellerProfile?.onboardingStatus || '').toUpperCase()) ||
+    ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(String(sellerProfile?.status || '').toUpperCase());
 
   if (!isApproved) {
     return <Navigate to="/pending-approval" replace />;

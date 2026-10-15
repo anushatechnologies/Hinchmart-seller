@@ -507,7 +507,7 @@ export function CreateOrderPage() {
             notices, and a Commercial Tax Invoice can be issued once picking starts.
           </p>
           <p className="font-semibold text-slate-700">
-            Fulfillment Seller: {profile?.companyName || 'Seller Enterprise'}
+            Fulfillment Seller: {profile?.companyName || profile?.name || 'Seller'}
           </p>
         </div>
 

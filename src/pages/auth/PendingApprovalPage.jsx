@@ -23,6 +23,8 @@ import { useAuthStore } from '../../store/authStore';
 import { sellerOnboardingService } from '../../services/sellerOnboarding.service';
 import { useUIStore } from '../../store/uiStore';
 import { db } from '../../mock/db';
+import { apiClient, markSellerApiAllowed } from '../../services/apiClient';
+import { auth } from '../../config/firebase';
 
 export function PendingApprovalPage() {
   const navigate = useNavigate();
@@ -53,12 +55,14 @@ export function PendingApprovalPage() {
     storeUser?.email ||
     user?.email ||
     sellerData?.personalDetails?.email ||
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('seller_email') : null) ||
     '';
 
   const sellerPhone =
     sellerProfile?.phone ||
     storeUser?.phone ||
     sellerData?.personalDetails?.phone ||
+    (typeof localStorage !== 'undefined' ? localStorage.getItem('seller_phone') : null) ||
     '';
 
   const localSeller = db.getSeller();
@@ -92,35 +96,60 @@ export function PendingApprovalPage() {
     setIsChecking(true);
     try {
       // 1. Check local seller registration status
-      const localSeller = db.getSeller();
-      const isPendingInStorage = localStorage.getItem('seller_approved') === 'false';
-      const localApproved = !isPendingInStorage && (
-        localStorage.getItem('seller_approved') === 'true' ||
-        ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(String(localSeller?.verificationStatus || '').toUpperCase()) ||
-        ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(String(localSeller?.onboardingStatus || '').toUpperCase()) ||
-        ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(String(localSeller?.status || '').toUpperCase())
-      );
+      const currentLocalSeller = db.getSeller();
+      const localApproved =
+        (typeof localStorage !== 'undefined' && localStorage.getItem('seller_approved') === 'true') ||
+        ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(String(currentLocalSeller?.verificationStatus || '').toUpperCase()) ||
+        ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(String(currentLocalSeller?.onboardingStatus || '').toUpperCase()) ||
+        ['APPROVED', 'VERIFIED', 'ACTIVE'].includes(String(currentLocalSeller?.status || '').toUpperCase()) ||
+        Boolean(currentLocalSeller?.verified);
 
-      // 2. Check live backend summary if seller ID is present
+      // 2. Check live backend status through multiple resilient strategies
       let backendApproved = false;
       let oStatus = '';
       let vStatus = '';
 
-      if (activeId) {
+      // Strategy A: Refresh Firebase token & verify role via POST /api/auth/sync
+      try {
+        const currentUser = auth?.currentUser;
+        if (currentUser && typeof currentUser.getIdToken === 'function') {
+          const freshToken = await currentUser.getIdToken(true);
+          const syncRes = await apiClient.post(
+            '/api/auth/sync',
+            { email: currentUser.email, phone: currentUser.phoneNumber || '' },
+            { headers: { Authorization: `Bearer ${freshToken}` }, timeout: 4000 }
+          );
+          const syncData = syncRes?.data?.data || syncRes?.data;
+          if (syncData) {
+            const role = String(syncData.role || '').toUpperCase();
+            const onboardingStat = String(syncData.onboardingStatus || '').toUpperCase();
+            if (role === 'SELLER' || role.includes('SELLER') || onboardingStat === 'VERIFIED' || onboardingStat === 'APPROVED') {
+              backendApproved = true;
+              if (syncData.accessToken) {
+                localStorage.setItem('accessToken', syncData.accessToken);
+                localStorage.setItem('sellerToken', syncData.accessToken);
+              }
+            }
+          }
+        }
+      } catch (_) {}
+
+      // Strategy B: Check seller onboarding summary endpoint if activeId is present
+      if (!backendApproved && activeId) {
         try {
           const summary = await sellerOnboardingService.getOnboardingSummary(activeId);
           if (summary) {
             setSellerData(summary);
             oStatus = String(
-              summary.onboardingStatus || 
-              summary.data?.onboardingStatus || 
-              summary.data?.overallStatus || 
-              summary.data?.status || 
+              summary.onboardingStatus ||
+              summary.data?.onboardingStatus ||
+              summary.data?.overallStatus ||
+              summary.data?.status ||
               ''
             ).toUpperCase();
             vStatus = String(
-              summary.verificationStatus || 
-              summary.data?.verificationStatus || 
+              summary.verificationStatus ||
+              summary.data?.verificationStatus ||
               ''
             ).toUpperCase();
 
@@ -135,28 +164,46 @@ export function PendingApprovalPage() {
         } catch (_) {}
       }
 
+      // Strategy C: Probe protected seller API (Spring Boot returns 200 OK once role is ROLE_SELLER)
+      if (!backendApproved) {
+        try {
+          const probeRes = await apiClient.get('/api/seller/products', { params: { limit: 1 }, timeout: 3500 });
+          if (probeRes.status === 200) {
+            backendApproved = true;
+          }
+        } catch (_) {}
+      }
+
       const isApproved = backendApproved || localApproved;
 
       if (isApproved) {
         setApprovalStatus('APPROVED');
-        localStorage.setItem('seller_approved', 'true');
-        localStorage.setItem('seller_onboarding_status', 'VERIFIED');
+        if (typeof localStorage !== 'undefined') {
+          localStorage.setItem('seller_approved', 'true');
+          localStorage.setItem('seller_onboarding_status', 'VERIFIED');
+          if (activeId && !localStorage.getItem('sellerId')) {
+            localStorage.setItem('sellerId', String(activeId));
+          }
+        }
+        markSellerApiAllowed();
         db.updateSeller({
           verificationStatus: 'VERIFIED',
           onboardingStatus: 'VERIFIED',
           status: 'ACTIVE',
           verified: true,
         });
+
         if (showToast) {
           addToast({
-            title: 'Account Verified!',
-            message: 'Your seller account has been approved. Welcome to HinchMart!',
+            title: 'Account Approved!',
+            message: 'Your seller account has been approved by admin. Opening Dashboard...',
             type: 'success',
           });
         }
-        setTimeout(() => {
-          navigate('/seller/dashboard');
-        }, 1200);
+
+        // Navigate immediately to seller dashboard
+        navigate('/seller/dashboard', { replace: true });
+        return;
       } else if (oStatus === 'REJECTED' || vStatus === 'REJECTED') {
         setApprovalStatus('REJECTED');
         if (showToast) {
@@ -168,11 +215,10 @@ export function PendingApprovalPage() {
         }
       } else {
         setApprovalStatus('PENDING_REVIEW');
-        localStorage.setItem('seller_approved', 'false');
         if (showToast) {
           addToast({
             title: 'Under Review',
-            message: 'Your application is being verified by the HinchMart team.',
+            message: 'Your application is awaiting administrator verification.',
             type: 'info',
           });
         }
@@ -185,11 +231,13 @@ export function PendingApprovalPage() {
   };
 
   useEffect(() => {
+    // Check approval status immediately on load
     checkStatus(false);
-    // Poll every 5s so when Admin approves, seller automatically navigates to dashboard
+
+    // Responsive poll every 3 seconds so the moment admin approves, dashboard opens
     const pollInterval = setInterval(() => {
       checkStatus(false);
-    }, 5000);
+    }, 3000);
 
     const handleStorageChange = (e) => {
       if (e.key === 'seller_approved' && e.newValue === 'true') {
@@ -222,6 +270,14 @@ export function PendingApprovalPage() {
       if (authLogout) await authLogout();
       if (storeLogout) storeLogout();
       db.clearAuth();
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem('seller_approved');
+        localStorage.removeItem('seller_onboarding_status');
+        localStorage.removeItem('sellerId');
+        localStorage.removeItem('seller_company');
+        localStorage.removeItem('seller_email');
+        localStorage.removeItem('seller_phone');
+      }
       navigate('/login');
     } catch (e) {
       navigate('/login');
@@ -378,12 +434,21 @@ export function PendingApprovalPage() {
               <button
                 type="button"
                 onClick={() => {
-                  localStorage.setItem('seller_approved', 'true');
-                  localStorage.setItem('seller_onboarding_status', 'VERIFIED');
-                  if (sellerId && !localStorage.getItem('sellerId')) {
-                    localStorage.setItem('sellerId', String(sellerId));
+                  if (typeof localStorage !== 'undefined') {
+                    localStorage.setItem('seller_approved', 'true');
+                    localStorage.setItem('seller_onboarding_status', 'VERIFIED');
+                    if (sellerId && !localStorage.getItem('sellerId')) {
+                      localStorage.setItem('sellerId', String(sellerId));
+                    }
                   }
-                  navigate('/seller/dashboard');
+                  markSellerApiAllowed();
+                  db.updateSeller({
+                    verificationStatus: 'VERIFIED',
+                    onboardingStatus: 'VERIFIED',
+                    status: 'ACTIVE',
+                    verified: true,
+                  });
+                  navigate('/seller/dashboard', { replace: true });
                 }}
                 className="w-full py-3 px-4 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold text-xs rounded-xl shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
               >

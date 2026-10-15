@@ -69,6 +69,21 @@ export const SellerAuthProvider = ({ children }) => {
         const cleanSellerId = profile?.sellerId || existingStoredId || authUserId || db.getSeller()?.id || (firebaseUser.phoneNumber ? firebaseUser.phoneNumber.replace(/\D/g, '').slice(-10) : (firebaseUser.email ? firebaseUser.email.split('@')[0] : null));
         const cleanRole = profile?.role || (cleanSellerId ? 'SELLER' : 'CUSTOMER');
 
+        const existingStoredStatus = typeof localStorage !== 'undefined' ? localStorage.getItem('seller_onboarding_status') : null;
+        const isApprovedStored = typeof localStorage !== 'undefined' && localStorage.getItem('seller_approved') === 'true';
+        const isPendingStored = typeof localStorage !== 'undefined' && (localStorage.getItem('seller_approved') === 'false' || existingStoredStatus === 'PENDING');
+
+        let calculatedStatus = 'PENDING';
+        if (profile?.onboardingStatus) {
+          calculatedStatus = profile.onboardingStatus;
+        } else if (isApprovedStored) {
+          calculatedStatus = 'VERIFIED';
+        } else if (isPendingStored) {
+          calculatedStatus = 'PENDING';
+        } else if (cleanSellerId) {
+          calculatedStatus = 'VERIFIED';
+        }
+
         const resolvedProfile = {
           userId: profile?.userId || 104,
           role: cleanRole,
@@ -76,7 +91,7 @@ export const SellerAuthProvider = ({ children }) => {
           firebaseUid: firebaseUser.uid,
           email: firebaseUser.email,
           name: extraData.name || firebaseUser.displayName || profile?.name || 'Authorized Seller',
-          onboardingStatus: profile?.onboardingStatus || (cleanSellerId ? 'VERIFIED' : 'PENDING'),
+          onboardingStatus: calculatedStatus,
         };
 
         setSellerProfile(resolvedProfile);

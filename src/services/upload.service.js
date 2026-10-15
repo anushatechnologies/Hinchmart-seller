@@ -1,5 +1,6 @@
 import { apiClient, USE_MOCK_API } from './api.js';
 import { db } from '../mock/db.js';
+import { compressImageFile } from '../utils/imageCompressor.js';
 
 // Helper to convert a File/Blob to a persistent Base64 Data URL
 function fileToBase64(file) {
@@ -75,17 +76,22 @@ export const uploadService = {
     }
 
     // Fallback: Convert to permanent Base64 Data URL (survives page refresh & localStorage)
-    const base64Url = await fileToBase64(file);
-    const fallbackUrl = base64Url || 'https://hinchmart-storage-191481838776-ap-south-2-an.s3.ap-south-2.amazonaws.com/categories/31d48b2a-3193-48fa-836a-86c89343b90d.jpg';
+    let base64Url = null;
+    try {
+      base64Url = await compressImageFile(file, { maxDim: 1200, quality: 0.85 });
+    } catch (_) {}
+    if (!base64Url) {
+      base64Url = await fileToBase64(file);
+    }
 
     if (onProgress) onProgress(100);
     return {
       success: true,
       fileName: file.name,
       fileSize: `${((file.size || 0) / (1024 * 1024)).toFixed(2)} MB`,
-      url: fallbackUrl,
-      imageUrl: fallbackUrl,
-      fileUrl: fallbackUrl,
+      url: base64Url,
+      imageUrl: base64Url,
+      fileUrl: base64Url,
       isImage,
       isLocalPreview: true,
     };

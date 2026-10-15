@@ -16,6 +16,7 @@ import {
  */
 export const ORDER_STATUSES = {
   NEW: 'New',
+  PLACED: 'New',
   CONFIRMED: 'Confirmed',
   PROCESSING: 'Processing',
   READY_FOR_DISPATCH: 'Packed / Ready',
@@ -127,6 +128,7 @@ export const ORDER_LIFECYCLE_STEPS = [
  */
 export const ALLOWED_TRANSITIONS = {
   New: ['Confirmed', 'Cancelled'],
+  Placed: ['Confirmed', 'Cancelled'],
   Pending: ['Confirmed', 'Cancelled'],
   Confirmed: ['Processing', 'Cancelled'],
   Processing: ['Packed / Ready', 'Ready for Dispatch', 'Cancelled'],

@@ -22,6 +22,7 @@ import {
   LayoutGrid,
   List as ListIcon,
   AlertTriangle,
+  XCircle,
   RotateCcw,
   Package,
 } from 'lucide-react';
@@ -190,17 +191,25 @@ export function ProductsListPage() {
     {
       header: 'Product',
       accessorKey: 'name',
-      cell: ({ row }) => (
-        <div className="flex items-center gap-3 min-w-[240px]">
-          <img
-            src={getProductImageUrl(row)}
-            alt={row.name}
-            onError={(e) => {
-              e.currentTarget.onerror = null;
-              e.currentTarget.src = getProductImageUrl({ ...row, images: [] });
-            }}
-            className="w-11 h-11 rounded-lg object-cover border border-slate-200 shrink-0 bg-slate-100"
-          />
+      cell: ({ row }) => {
+        const prodImg = getProductImageUrl(row);
+        return (
+          <div className="flex items-center gap-3 min-w-[240px]">
+            <div className="w-11 h-11 rounded-lg overflow-hidden border border-slate-200 shrink-0 bg-slate-100 flex items-center justify-center">
+              {prodImg ? (
+                <img
+                  src={prodImg}
+                  alt={row.name}
+                  onError={(e) => {
+                    e.currentTarget.style.display = 'none';
+                    const fallback = e.currentTarget.parentElement?.querySelector('.table-fallback-icon');
+                    if (fallback) fallback.classList.remove('hidden');
+                  }}
+                  className="w-full h-full object-cover"
+                />
+              ) : null}
+              <Package className={`w-5 h-5 text-slate-300 table-fallback-icon ${prodImg ? 'hidden' : ''}`} />
+            </div>
           <div className="min-w-0">
             <Link
               to={`/seller/products/${row.id}`}
@@ -225,8 +234,9 @@ export function ProductsListPage() {
             )}
           </div>
         </div>
-      ),
+      );
     },
+  },
     {
       header: 'SKU / HSN',
       accessorKey: 'sku',
@@ -413,21 +423,339 @@ export function ProductsListPage() {
     },
   ];
 
+  // Status/Stock filter chips for phone view matching Screen 3
+  const [mobileFilter, setMobileFilter] = useState('All');
+  const mobileFilterChips = ['All', 'Active', 'Rejected', 'Low Stock', 'Out of Stock'];
+
+  const displayMobileProducts = useMemo(() => {
+    return (products || [])
+      .map((p) => {
+        const isRejected = p.status === 'REJECTED' || p.approvalStatus === 'REJECTED';
+        const isDeletedByAdmin =
+          !isRejected && (
+            p.status === 'DELETED_BY_ADMIN' ||
+            p.status === 'DELETED' ||
+            p.status === 'REMOVED_BY_ADMIN' ||
+            p.approvalStatus === 'DELETED_BY_ADMIN' ||
+            Boolean(p.deletedByAdmin)
+          );
+        const isApproved =
+          !isRejected &&
+          !isDeletedByAdmin &&
+          (p.status === 'APPROVED' ||
+            p.approvalStatus === 'APPROVED' ||
+            p.status === 'ACTIVE' ||
+            p.status === 'Active' ||
+            Boolean(p.active));
+        const isPending = !isRejected && !isDeletedByAdmin && !isApproved;
+        const isLowStock = (p.stock || 0) <= (p.lowStockThreshold || 10) && (p.stock || 0) > 0;
+        const isOutOfStock = (p.stock || 0) === 0;
+
+        return {
+          id: p.id || p.productId,
+          name: p.name || p.title,
+          sku: p.sku || '—',
+          brand: p.brand || '',
+          category: p.category || '',
+          price: p.sellingPrice || p.price || 0,
+          mrp: p.mrp || 0,
+          stock: p.stock || 0,
+          unit: p.unit || 'units',
+          rejectionReason: p.rejectionReason || '',
+          isRejected,
+          isDeletedByAdmin,
+          isPending,
+          isApproved,
+          isLowStock,
+          isOutOfStock,
+          rawProduct: p,
+          image: getProductImageUrl(p) || null,
+        };
+      })
+      .filter((p) => {
+        if (searchTerm.trim()) {
+          const q = searchTerm.toLowerCase();
+          const matchName = p.name.toLowerCase().includes(q);
+          const matchSku = p.sku.toLowerCase().includes(q);
+          const matchCat = p.category.toLowerCase().includes(q);
+          const matchBrand = p.brand.toLowerCase().includes(q);
+          if (!matchName && !matchSku && !matchCat && !matchBrand) return false;
+        }
+        if (mobileFilter === 'Active') return p.isApproved && !p.isLowStock && !p.isOutOfStock;
+        if (mobileFilter === 'Rejected') return p.isRejected || p.isDeletedByAdmin;
+        if (mobileFilter === 'Low Stock') return p.isApproved && p.isLowStock;
+        if (mobileFilter === 'Out of Stock') return p.isApproved && p.isOutOfStock;
+        return true;
+      });
+  }, [products, mobileFilter, searchTerm]);
+
   return (
-    <div className="space-y-6">
-      {/* 1. PRODUCTS PAGE HEADER */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
-        <div>
-          <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
-            Products
-          </h1>
-          <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
-            Manage your construction products, inventory, pricing, and product information.
-          </p>
+    <>
+      {/* ================= PHONE VIEW PRODUCTS (All Statuses, Rejection Banners & Actions Included) ================= */}
+      <div className="block md:hidden space-y-3 pb-6">
+        {/* Title and Add Product Button */}
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-lg font-bold text-slate-900 tracking-tight">My Products</h1>
+            <p className="text-xs text-slate-500">Live, pending & rejected catalog listings</p>
+          </div>
+          <button
+            type="button"
+            onClick={() => navigate('/seller/products/add')}
+            className="bg-[#1D64ED] hover:bg-blue-700 text-white rounded-lg px-3 py-1.5 text-xs font-semibold flex items-center gap-1 shadow-xs transition-colors cursor-pointer"
+          >
+            <Plus className="w-3.5 h-3.5 stroke-[2.5]" />
+            <span>Add Product</span>
+          </button>
         </div>
 
-        {/* Header Controls: Export, Upload, Add Product, Grid/List Toggle */}
-        <div className="flex flex-wrap items-center gap-2.5">
+        {/* Search Bar */}
+        <div className="relative">
+          <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            placeholder="Search by name, SKU, or brand..."
+            className="w-full pl-9 pr-3 py-2 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/20 shadow-2xs"
+          />
+        </div>
+
+        {/* Horizontal Status Chips (All, Active, Rejected, Low Stock, Out of Stock) */}
+        <div className="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5">
+          {mobileFilterChips.map((chip) => {
+            const isActive = mobileFilter === chip;
+            return (
+              <button
+                key={chip}
+                type="button"
+                onClick={() => setMobileFilter(chip)}
+                className={`px-3.5 py-1.5 rounded-lg text-xs font-medium shrink-0 transition-all cursor-pointer ${
+                  isActive
+                    ? chip === 'Rejected'
+                      ? 'bg-rose-600 text-white shadow-xs'
+                      : 'bg-[#1D64ED] text-white shadow-xs'
+                    : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'
+                }`}
+              >
+                {chip}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Product Cards List */}
+        <div className="space-y-3">
+          {displayMobileProducts.map((product) => {
+            const hasRejectionOrDeletion = product.isRejected || product.isDeletedByAdmin;
+
+            return (
+              <div
+                key={product.id}
+                className={`bg-white rounded-2xl p-3.5 border shadow-2xs space-y-3 transition-shadow ${
+                  hasRejectionOrDeletion ? 'border-rose-200/90' : 'border-slate-200/80'
+                }`}
+              >
+                {/* 1. Header Badges & Actions */}
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <ProductStatusBadge
+                      status={product.isDeletedByAdmin ? 'DELETED_BY_ADMIN' : product.rawProduct.status}
+                      product={product.rawProduct}
+                    />
+                    {product.brand && (
+                      <span className="px-2 py-0.5 rounded text-[10px] font-extrabold bg-slate-900 text-white">
+                        {product.brand}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/seller/products/${product.id}`)}
+                      className="p-1.5 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-lg"
+                      title="View Details"
+                    >
+                      <Eye className="w-4 h-4" />
+                    </button>
+                    {!product.isDeletedByAdmin && (
+                      <button
+                        type="button"
+                        onClick={() => navigate(`/seller/products/${product.id}/edit`)}
+                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg"
+                        title="Edit Listing"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* 2. Main Item Section (Image + Title/Category/SKU) */}
+                <div className="flex items-start gap-3">
+                  <div className="w-20 h-20 rounded-xl bg-slate-100 overflow-hidden shrink-0 border border-slate-200/80 flex items-center justify-center">
+                    {product.image ? (
+                      <img
+                        src={product.image}
+                        alt={product.name}
+                        className="w-full h-full object-cover"
+                        loading="lazy"
+                        onError={(e) => {
+                          e.currentTarget.style.display = 'none';
+                          const fallback = e.currentTarget.parentElement?.querySelector('.prod-fallback-icon');
+                          if (fallback) fallback.classList.remove('hidden');
+                        }}
+                      />
+                    ) : null}
+                    <Package className={`w-8 h-8 text-slate-300 prod-fallback-icon ${product.image ? 'hidden' : ''}`} />
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    {product.category && (
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block truncate">
+                        {product.category.replace('-', ' & ')}
+                      </span>
+                    )}
+                    <h3 className="text-xs sm:text-sm font-bold text-slate-900 leading-snug line-clamp-2 mt-0.5">
+                      {product.name}
+                    </h3>
+                    <p className="text-[11px] font-mono text-slate-400 mt-1 truncate">
+                      ID: <strong className="text-slate-700">{product.id}</strong> • SKU: <strong className="text-slate-700">{product.sku}</strong>
+                    </p>
+                  </div>
+                </div>
+
+                {/* 3. Rejection or Admin Deletion Alert Banner */}
+                {product.isRejected && (
+                  <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-900 text-xs flex items-start gap-2 shadow-2xs">
+                    <XCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-extrabold block text-rose-950">Rejected by Admin</span>
+                      <span className="text-rose-700 text-[11px] font-medium mt-0.5 block leading-tight">
+                        {product.rejectionReason || 'Removed from inventory by seller'}
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {product.isDeletedByAdmin && (
+                  <div className="p-2.5 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs flex items-start gap-2 shadow-2xs">
+                    <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                    <div>
+                      <span className="font-extrabold block text-rose-950">Removed by Admin</span>
+                      <span className="text-rose-700 text-[11px] font-medium mt-0.5 block leading-tight">
+                        Listing removed from catalog by Admin.
+                      </span>
+                    </div>
+                  </div>
+                )}
+
+                {/* 4. Pricing & Available Stock Row */}
+                <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs">
+                  <div>
+                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Rate / Price</span>
+                    <span className="text-sm font-black text-slate-900">
+                      ₹{typeof product.price === 'number' ? product.price.toLocaleString('en-IN') : product.price}
+                      <span className="text-[10px] text-slate-500 font-normal"> /{product.unit}</span>
+                    </span>
+                  </div>
+
+                  <div className="text-right">
+                    <span className="text-[10px] text-slate-400 uppercase font-bold block">Available Stock</span>
+                    <div className="flex items-center gap-1.5 justify-end">
+                      <span
+                        className={`text-xs font-black ${
+                          product.isOutOfStock ? 'text-rose-600' : product.isLowStock ? 'text-amber-600' : 'text-slate-900'
+                        }`}
+                      >
+                        {typeof product.stock === 'number' ? product.stock.toLocaleString('en-IN') : product.stock} {product.unit}
+                      </span>
+                      {!hasRejectionOrDeletion && (
+                        <span
+                          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-semibold ${
+                            product.isLowStock
+                              ? 'bg-amber-50 text-amber-700'
+                              : product.isOutOfStock
+                              ? 'bg-slate-100 text-slate-500'
+                              : 'bg-emerald-50 text-emerald-700'
+                          }`}
+                        >
+                          <span
+                            className={`w-1 h-1 rounded-full ${
+                              product.isLowStock ? 'bg-amber-500' : product.isOutOfStock ? 'bg-slate-400' : 'bg-emerald-500'
+                            }`}
+                          />
+                          {product.isLowStock ? 'Low' : product.isOutOfStock ? 'Out' : 'In Stock'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* 5. Bottom Action Buttons for Rejected or Deleted by Admin */}
+                {product.isRejected && (
+                  <div className="flex items-center gap-2 pt-2 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/seller/products/${product.id}/edit`)}
+                      className="flex-1 py-2 bg-amber-500 hover:bg-amber-600 text-slate-950 text-xs font-extrabold rounded-xl shadow-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Edit2 className="w-3.5 h-3.5 stroke-[2.5]" />
+                      <span>Edit & Re-submit</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/seller/products/${product.id}`)}
+                      className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>View</span>
+                    </button>
+                  </div>
+                )}
+
+                {product.isDeletedByAdmin && (
+                  <div className="pt-2 border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setDeleteConfirmProduct(product.rawProduct)}
+                      className="w-full py-2 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                    >
+                      <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                      <span>Remove from My List</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+
+          {displayMobileProducts.length === 0 && (
+            <div className="bg-white rounded-xl p-8 border border-slate-100 text-center">
+              <Package className="w-8 h-8 text-slate-300 mx-auto mb-2" />
+              <p className="text-xs font-semibold text-slate-700">No products found</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">Try clearing your search or filter</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ================= LAPTOP / DESKTOP PRODUCTS (100% Unchanged) ================= */}
+      <div className="hidden md:block space-y-6">
+        {/* 1. PRODUCTS PAGE HEADER */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-200">
+          <div>
+            <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2">
+              Products
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+              Manage your construction products, inventory, pricing, and product information.
+            </p>
+          </div>
+
+          {/* Header Controls: Export, Upload, Add Product, Grid/List Toggle */}
+          <div className="flex flex-wrap items-center gap-2.5">
           <Button
             variant="secondary"
             size="sm"
@@ -766,5 +1094,6 @@ export function ProductsListPage() {
         onClose={() => setIsAddProductModalOpen(false)}
       />
     </div>
+    </>
   );
 }

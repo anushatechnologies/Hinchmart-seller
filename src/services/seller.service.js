@@ -31,55 +31,89 @@ export const sellerService = {
    * 5.1 GET /api/seller/documents
    */
   async getDocuments(sellerId) {
+    const localDocs = (db.getDocuments ? db.getDocuments() : []) || [];
+    let storedPhotos = {};
+    if (typeof localStorage !== 'undefined') {
+      try {
+        storedPhotos = JSON.parse(localStorage.getItem('hinchmart_kyc_photos') || '{}');
+      } catch (_) {}
+    }
+
+    const baseTemplates = [
+      { documentType: 'PAN', label: 'PAN Card', name: 'PAN Card', fileName: null, fileUrl: null, photoUrl: null, status: 'Not Uploaded' },
+      { documentType: 'AADHAAR', label: 'Aadhaar Card', name: 'Aadhaar Card', fileName: null, fileUrl: null, photoUrl: null, status: 'Not Uploaded' },
+      { documentType: 'GSTIN', label: 'GSTIN Certificate', name: 'GSTIN Certificate', fileName: null, fileUrl: null, photoUrl: null, status: 'Not Uploaded' },
+      { documentType: 'INCORPORATION', label: 'Certificate of Incorporation', name: 'Certificate of Incorporation', fileName: null, fileUrl: null, photoUrl: null, status: 'Not Uploaded' },
+      { documentType: 'MSME', label: 'MSME/Udyam Registration', name: 'MSME Registration', fileName: null, fileUrl: null, photoUrl: null, status: 'Not Uploaded' },
+      { documentType: 'TRADE_LICENSE', label: 'Trade License', name: 'Trade License', fileName: null, fileUrl: null, photoUrl: null, status: 'Not Uploaded' },
+    ];
+
+    let backendList = [];
     if (canAccessSellerApi('/api/seller/documents')) {
       try {
         const response = await apiClient.get('/api/seller/documents');
         const rawList = response.data?.data || response.data;
         if (Array.isArray(rawList)) {
-          const templates = [
-            { documentType: 'GSTIN', label: 'GSTIN Certificate', name: 'GSTIN Certificate', fileName: null, fileUrl: null, status: 'Not Uploaded' },
-            { documentType: 'PAN', label: 'PAN Card', name: 'PAN Card', fileName: null, fileUrl: null, status: 'Not Uploaded' },
-            { documentType: 'INCORPORATION', label: 'Certificate of Incorporation', name: 'Certificate of Incorporation', fileName: null, fileUrl: null, status: 'Not Uploaded' },
-            { documentType: 'MSME', label: 'MSME/Udyam Registration', name: 'MSME Registration', fileName: null, fileUrl: null, status: 'Not Uploaded' },
-            { documentType: 'TRADE_LICENSE', label: 'Trade License', name: 'Trade License', fileName: null, fileUrl: null, status: 'Not Uploaded' },
-          ];
-          const mapped = rawList.map(d => ({
-            ...d,
-            id: d.id || `doc_${(d.documentType || 'doc').toLowerCase()}`,
-            name: d.label || d.name || `${d.documentType} Document`,
-            status: d.status === 'VERIFIED' ? 'Verified' : (d.status === 'UPLOADED' || d.status === 'PENDING') ? 'Pending' : (d.status === 'REJECTED') ? 'Rejected' : 'Not Uploaded',
-            uploadedAt: d.uploadedAt || null,
-          }));
-          return templates.map(tpl => {
-            const found = mapped.find(m => (m.documentType || '').toUpperCase() === tpl.documentType);
-            return found ? { ...tpl, ...found } : tpl;
-          });
+          backendList = rawList;
         }
       } catch (err) {
         // Fallback
       }
     }
 
-    if (sellerId && canAccessSellerApi('/api/seller/documents')) {
+    if (sellerId && backendList.length === 0 && canAccessSellerApi('/api/seller/documents')) {
       try {
         const docs = await sellerOnboardingService.getSellerDocuments(sellerId);
-        if (Array.isArray(docs)) return docs;
+        if (Array.isArray(docs)) backendList = docs;
       } catch (err) {
         // Fallback
       }
     }
-    await delay(100);
-    const local = db.getDocuments ? db.getDocuments() : [];
-    if (local && local.length > 0) return local;
 
-    // Default KYC templates
-    return [
-      { documentType: 'GSTIN', label: 'GSTIN Certificate', name: 'GSTIN Certificate', fileName: null, fileUrl: null, status: 'Not Uploaded' },
-      { documentType: 'PAN', label: 'PAN Card', name: 'PAN Card', fileName: null, fileUrl: null, status: 'Not Uploaded' },
-      { documentType: 'INCORPORATION', label: 'Certificate of Incorporation', name: 'Certificate of Incorporation', fileName: null, fileUrl: null, status: 'Not Uploaded' },
-      { documentType: 'MSME', label: 'MSME/Udyam Registration', name: 'MSME Registration', fileName: null, fileUrl: null, status: 'Not Uploaded' },
-      { documentType: 'TRADE_LICENSE', label: 'Trade License', name: 'Trade License', fileName: null, fileUrl: null, status: 'Not Uploaded' },
-    ];
+    // Merge: Base Templates + Live Backend + Local DB Documents + Stored KYC Photos
+    return baseTemplates.map((tpl) => {
+      const merged = { ...tpl };
+
+      // 1. Backend Match
+      const bMatch = backendList.find((m) => (m.documentType || m.type || '').toUpperCase() === tpl.documentType);
+      if (bMatch && bMatch.status && bMatch.status !== 'Not Uploaded') {
+        Object.assign(merged, bMatch);
+        merged.status = bMatch.status === 'VERIFIED' ? 'Verified' : 'Pending';
+      }
+
+      // 2. Local DB Compliance Document Match
+      const lMatch = localDocs.find((d) => {
+        const t = (d.type || d.documentType || d.name || '').toUpperCase();
+        if (tpl.documentType === 'PAN' && t.includes('PAN')) return true;
+        if (tpl.documentType === 'AADHAAR' && (t.includes('AADHAAR') || t.includes('AADHAR'))) return true;
+        if (tpl.documentType === 'GSTIN' && t.includes('GST')) return true;
+        return t === tpl.documentType;
+      });
+
+      if (lMatch && (lMatch.fileName || lMatch.fileUrl || lMatch.photoUrl)) {
+        merged.fileName = lMatch.fileName || merged.fileName;
+        merged.fileUrl = lMatch.fileUrl || lMatch.photoUrl || merged.fileUrl;
+        merged.photoUrl = lMatch.photoUrl || lMatch.fileUrl || merged.photoUrl;
+        merged.fileSize = lMatch.fileSize || merged.fileSize;
+        merged.documentNumber = lMatch.documentNumber || merged.documentNumber;
+        merged.status = lMatch.status || (merged.status !== 'Not Uploaded' ? merged.status : 'Pending');
+        merged.notes = lMatch.notes || merged.notes;
+      }
+
+      // 3. Stored KYC Photos Match (exact uploaded photo)
+      const pMatch = storedPhotos[tpl.documentType];
+      if (pMatch && pMatch.dataUrl) {
+        merged.photoUrl = pMatch.dataUrl;
+        merged.fileUrl = pMatch.dataUrl;
+        merged.fileName = pMatch.fileName || merged.fileName || `${tpl.label.toLowerCase().replace(/\s+/g, '_')}.jpg`;
+        merged.fileSize = pMatch.fileSize || merged.fileSize || '1.1 MB';
+        if (merged.status === 'Not Uploaded') {
+          merged.status = 'Pending';
+        }
+      }
+
+      return merged;
+    });
   },
 
   /**
@@ -112,8 +146,8 @@ export const sellerService = {
     return db.uploadDocument(docData);
   },
 
-  async uploadMandatoryDocument(sellerId, documentType, file) {
-    return sellerOnboardingService.uploadMandatoryDocument(sellerId, documentType, file);
+  async uploadMandatoryDocument(sellerId, documentType, file, fileUrl = null) {
+    return sellerOnboardingService.uploadMandatoryDocument(sellerId, documentType, file, fileUrl);
   },
 
   async updateDocument(id, updates) {

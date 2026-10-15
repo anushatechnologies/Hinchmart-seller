@@ -44,6 +44,8 @@ import { authService } from '../../services/authService';
 import { auth, createUserWithEmailAndPassword, signInWithEmailAndPassword } from '../../firebase/firebaseConfig';
 import apiClient from '../../api/apiClient';
 import { db } from '../../mock/db.js';
+import { compressImageFile } from '../../utils/imageCompressor.js';
+import { saveStoredKycPhoto } from '../../utils/documentPhotoUtils.js';
 
 const BUSINESS_TYPES = [
   { value: 'DISTRIBUTOR', label: 'Distributor' },
@@ -90,8 +92,26 @@ const INDIAN_STATES = [
 export function RegisterPage() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { register: registerSeller, isLoading, onboardingSellerId, setOnboardingSellerId } = useAuthStore();
+  const { register: registerSeller, isAuthenticated, isLoading, onboardingSellerId, setOnboardingSellerId } = useAuthStore();
   const addToast = useUIStore((state) => state.addToast);
+
+  // Redirection guard: If seller already completed registration or is pending/approved, route immediately
+  useEffect(() => {
+    const isPending =
+      typeof localStorage !== 'undefined' &&
+      (localStorage.getItem('seller_onboarding_status') === 'PENDING' ||
+        localStorage.getItem('seller_approved') === 'false');
+    const isApproved =
+      typeof localStorage !== 'undefined' && localStorage.getItem('seller_approved') === 'true';
+
+    if (isPending || isAuthenticated) {
+      if (isApproved) {
+        navigate('/seller/dashboard', { replace: true });
+      } else {
+        navigate('/pending-approval', { replace: true });
+      }
+    }
+  }, [isAuthenticated, navigate]);
 
   const initialMobile = location.state?.verifiedMobile || '';
 
@@ -253,7 +273,7 @@ export function RegisterPage() {
   };
 
   // Handle File Upload for PAN, Aadhaar, and GST
-  const handleFileUpload = (fieldOrEvent, maybeEvent) => {
+  const handleFileUpload = async (fieldOrEvent, maybeEvent) => {
     let field = 'panCardImage';
     let e = fieldOrEvent;
     if (typeof fieldOrEvent === 'string') {
@@ -272,19 +292,48 @@ export function RegisterPage() {
       return;
     }
 
-    const isImage = file.type.startsWith('image/') || /\.(jpg|jpeg|png)$/i.test(file.name);
+    const isImage = file.type.startsWith('image/') || /\.(jpg|jpeg|png|webp)$/i.test(file.name);
     const sizeFormatted =
       file.size > 1024 * 1024
         ? `${(file.size / (1024 * 1024)).toFixed(2)} MB`
         : `${(file.size / 1024).toFixed(1)} KB`;
+
+    let dataUrl = null;
+    if (isImage) {
+      try {
+        dataUrl = await compressImageFile(file, { maxDim: 1200, quality: 0.85 });
+      } catch (_) {}
+    }
+
+    if (!dataUrl) {
+      try {
+        dataUrl = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (loadEvt) => resolve(loadEvt.target?.result || null);
+          reader.onerror = () => resolve(null);
+          reader.readAsDataURL(file);
+        });
+      } catch (_) {}
+    }
 
     const fileData = {
       file,
       name: file.name,
       size: sizeFormatted,
       type: file.type || 'image/jpeg',
-      previewUrl: isImage ? URL.createObjectURL(file) : null,
+      previewUrl: dataUrl || (isImage ? URL.createObjectURL(file) : null),
+      dataUrl,
     };
+
+    if (dataUrl) {
+      const key = field === 'panCardImage' ? 'PAN' : field === 'aadhaarCardImage' ? 'AADHAAR' : 'GSTIN';
+      saveStoredKycPhoto(key, {
+        dataUrl,
+        fileName: file.name,
+        fileSize: sizeFormatted,
+        uploadedAt: new Date().toISOString(),
+      });
+    }
 
     setFormData((prev) => ({ ...prev, [field]: fileData }));
     if (fieldErrors[field]) {
@@ -559,6 +608,8 @@ export function RegisterPage() {
           file: formData.panCardImage?.file,
           fileName: formData.panCardImage?.name,
           fileSize: formData.panCardImage?.size,
+          fileUrl: formData.panCardImage?.dataUrl || formData.panCardImage?.previewUrl || null,
+          photoUrl: formData.panCardImage?.dataUrl || formData.panCardImage?.previewUrl || null,
           status: 'Pending',
         });
       }
@@ -568,6 +619,8 @@ export function RegisterPage() {
           file: formData.aadhaarCardImage?.file,
           fileName: formData.aadhaarCardImage?.name,
           fileSize: formData.aadhaarCardImage?.size,
+          fileUrl: formData.aadhaarCardImage?.dataUrl || formData.aadhaarCardImage?.previewUrl || null,
+          photoUrl: formData.aadhaarCardImage?.dataUrl || formData.aadhaarCardImage?.previewUrl || null,
           status: 'Pending',
         });
       }
@@ -577,6 +630,8 @@ export function RegisterPage() {
           file: formData.gstCertificateImage?.file,
           fileName: formData.gstCertificateImage?.name,
           fileSize: formData.gstCertificateImage?.size,
+          fileUrl: formData.gstCertificateImage?.dataUrl || formData.gstCertificateImage?.previewUrl || null,
+          photoUrl: formData.gstCertificateImage?.dataUrl || formData.gstCertificateImage?.previewUrl || null,
           status: 'Pending',
         });
       }
@@ -778,15 +833,25 @@ export function RegisterPage() {
         console.warn('finalSubmit notice (continuing to success step):', finalSubmitErr.message);
       }
 
-      // Save compliance documents into db vault
+      // Save compliance documents into db vault and sync with backend
       if (formData.panCardImage) {
         db.saveComplianceDocument('PAN Document', {
           documentNumber: formData.panCardNumber,
           file: formData.panCardImage?.file,
           fileName: formData.panCardImage?.name,
           fileSize: formData.panCardImage?.size,
+          fileUrl: formData.panCardImage?.dataUrl || formData.panCardImage?.previewUrl || null,
+          photoUrl: formData.panCardImage?.dataUrl || formData.panCardImage?.previewUrl || null,
           status: 'Pending',
         });
+        if (formData.panCardImage?.file && activeSellerId) {
+          sellerOnboardingService.uploadMandatoryDocument(
+            activeSellerId,
+            'PAN',
+            formData.panCardImage.file,
+            formData.panCardImage.dataUrl
+          ).catch(() => {});
+        }
       }
       if (formData.aadhaarCardImage) {
         db.saveComplianceDocument('Aadhaar Document', {
@@ -794,8 +859,18 @@ export function RegisterPage() {
           file: formData.aadhaarCardImage?.file,
           fileName: formData.aadhaarCardImage?.name,
           fileSize: formData.aadhaarCardImage?.size,
+          fileUrl: formData.aadhaarCardImage?.dataUrl || formData.aadhaarCardImage?.previewUrl || null,
+          photoUrl: formData.aadhaarCardImage?.dataUrl || formData.aadhaarCardImage?.previewUrl || null,
           status: 'Pending',
         });
+        if (formData.aadhaarCardImage?.file && activeSellerId) {
+          sellerOnboardingService.uploadMandatoryDocument(
+            activeSellerId,
+            'AADHAAR',
+            formData.aadhaarCardImage.file,
+            formData.aadhaarCardImage.dataUrl
+          ).catch(() => {});
+        }
       }
       if (formData.gstCertificateImage) {
         db.saveComplianceDocument('GST Certificate', {
@@ -803,14 +878,28 @@ export function RegisterPage() {
           file: formData.gstCertificateImage?.file,
           fileName: formData.gstCertificateImage?.name,
           fileSize: formData.gstCertificateImage?.size,
+          fileUrl: formData.gstCertificateImage?.dataUrl || formData.gstCertificateImage?.previewUrl || null,
+          photoUrl: formData.gstCertificateImage?.dataUrl || formData.gstCertificateImage?.previewUrl || null,
           status: 'Pending',
         });
+        if (formData.gstCertificateImage?.file && activeSellerId) {
+          sellerOnboardingService.uploadMandatoryDocument(
+            activeSellerId,
+            'GST',
+            formData.gstCertificateImage.file,
+            formData.gstCertificateImage.dataUrl
+          ).catch(() => {});
+        }
       }
 
       // Establish authenticated session and persist local DB seller
       await registerSeller(formData);
       localStorage.setItem('seller_approved', 'false');
       localStorage.setItem('seller_onboarding_status', 'PENDING');
+      localStorage.setItem('sellerId', String(activeSellerId));
+      localStorage.setItem('seller_company', formData.companyName || '');
+      localStorage.setItem('seller_email', formData.email || '');
+      localStorage.setItem('seller_phone', formData.mobileNumber || '');
       db.updateSeller({
         id: activeSellerId,
         sellerId: activeSellerId,
@@ -840,13 +929,15 @@ export function RegisterPage() {
         status: 'PENDING',
         verified: false,
       });
-      setCurrentStep(5); // Success Step
 
       addToast({
         title: 'Submitted for Review',
         message: 'Your seller onboarding has been submitted for admin verification.',
         type: 'success',
       });
+
+      // Navigate to /pending-approval so the URL updates and refresh stays on Pending page
+      navigate('/pending-approval', { replace: true });
     } catch (err) {
       console.error('Final submit error:', err);
       addToast({
@@ -1112,7 +1203,7 @@ export function RegisterPage() {
                         Statutory Tax & KYC Identification (PAN, Aadhaar, GST)
                       </h4>
                       <p className="text-[11px] text-slate-500">
-                        Enter your statutory tax registration details and upload verification documents
+                        Enter your statutory tax identification numbers (PAN, Aadhaar, GSTIN)
                       </p>
                     </div>
                   </div>
@@ -1208,167 +1299,14 @@ export function RegisterPage() {
                   </div>
                 </div>
 
-                {/* 3 Document Upload Dropzones */}
-                <div className="space-y-2 pt-2 border-t border-slate-200/60">
-                  <div className="flex items-center justify-between">
-                    <p className="text-xs font-bold text-slate-800">
-                      Upload Statutory Document Proofs (Max 10MB each • PDF, JPG, PNG)
+                {/* Statutory Verification Note */}
+                <div className="p-3.5 bg-emerald-50/70 border border-emerald-200/80 rounded-xl flex items-start gap-2.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0 mt-0.5" />
+                  <div className="text-xs text-slate-700 space-y-0.5">
+                    <p className="font-bold text-emerald-950">Direct Statutory Verification</p>
+                    <p className="text-[11px] text-slate-600 leading-relaxed">
+                      Your PAN, Aadhaar, and GSTIN numbers are registered directly with your seller account. Physical document photo/PDF uploads are not required during registration; you can upload document proofs anytime in the Documents Vault under your seller portal.
                     </p>
-                    <span className="text-[10px] text-slate-500 font-semibold">* PAN Document required</span>
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                    {/* 1. PAN Card Document */}
-                    <div>
-                      <input
-                        ref={panFileInputRef}
-                        type="file"
-                        accept="image/jpeg,image/png,application/pdf"
-                        onChange={(e) => handleFileUpload('panCardImage', e)}
-                        className="hidden"
-                      />
-                      <div
-                        onClick={() => panFileInputRef.current?.click()}
-                        className={`border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition-colors shadow-2xs min-h-[96px] flex flex-col justify-center items-center ${
-                          fieldErrors.panCardImage
-                            ? 'border-rose-500 bg-rose-50'
-                            : formData.panCardImage
-                            ? 'border-emerald-500/60 bg-emerald-50/50'
-                            : 'border-slate-300 hover:border-emerald-500/60 hover:bg-emerald-50/20 bg-white'
-                        }`}
-                      >
-                        {formData.panCardImage ? (
-                          <div className="w-full flex items-center justify-between text-left">
-                            <div className="flex items-center gap-2 overflow-hidden">
-                              <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
-                              <div className="truncate">
-                                <p className="text-[11px] font-bold text-slate-900 truncate">
-                                  {formData.panCardImage.name}
-                                </p>
-                                <p className="text-[10px] text-emerald-700 font-semibold">
-                                  PAN Attached • {formData.panCardImage.size}
-                                </p>
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={(e) => handleRemoveFile('panCardImage', e)}
-                              className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer"
-                              title="Remove PAN"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="py-1">
-                            <Upload className="w-4 h-4 text-slate-400 mx-auto mb-1" />
-                            <p className="text-[11px] font-bold text-slate-800">Upload PAN Card <span className="text-orange-500">*</span></p>
-                            <p className="text-[10px] text-slate-400">PDF, JPG, PNG</p>
-                          </div>
-                        )}
-                      </div>
-                      {fieldErrors.panCardImage && (
-                        <p className="mt-1 text-[11px] font-semibold text-rose-600">{fieldErrors.panCardImage}</p>
-                      )}
-                    </div>
-
-                    {/* 2. Aadhaar Card Document */}
-                    <div>
-                      <input
-                        ref={aadhaarFileInputRef}
-                        type="file"
-                        accept="image/jpeg,image/png,application/pdf"
-                        onChange={(e) => handleFileUpload('aadhaarCardImage', e)}
-                        className="hidden"
-                      />
-                      <div
-                        onClick={() => aadhaarFileInputRef.current?.click()}
-                        className={`border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition-colors shadow-2xs min-h-[96px] flex flex-col justify-center items-center ${
-                          formData.aadhaarCardImage
-                            ? 'border-emerald-500/60 bg-emerald-50/50'
-                            : 'border-slate-300 hover:border-emerald-500/60 hover:bg-emerald-50/20 bg-white'
-                        }`}
-                      >
-                        {formData.aadhaarCardImage ? (
-                          <div className="w-full flex items-center justify-between text-left">
-                            <div className="flex items-center gap-2 overflow-hidden">
-                              <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
-                              <div className="truncate">
-                                <p className="text-[11px] font-bold text-slate-900 truncate">
-                                  {formData.aadhaarCardImage.name}
-                                </p>
-                                <p className="text-[10px] text-emerald-700 font-semibold">
-                                  Aadhaar Attached • {formData.aadhaarCardImage.size}
-                                </p>
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={(e) => handleRemoveFile('aadhaarCardImage', e)}
-                              className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer"
-                              title="Remove Aadhaar"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="py-1">
-                            <Upload className="w-4 h-4 text-slate-400 mx-auto mb-1" />
-                            <p className="text-[11px] font-bold text-slate-800">Upload Aadhaar Card</p>
-                            <p className="text-[10px] text-slate-400">PDF, JPG, PNG</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* 3. GST Certificate Document */}
-                    <div>
-                      <input
-                        ref={gstFileInputRef}
-                        type="file"
-                        accept="image/jpeg,image/png,application/pdf"
-                        onChange={(e) => handleFileUpload('gstCertificateImage', e)}
-                        className="hidden"
-                      />
-                      <div
-                        onClick={() => gstFileInputRef.current?.click()}
-                        className={`border-2 border-dashed rounded-xl p-3 text-center cursor-pointer transition-colors shadow-2xs min-h-[96px] flex flex-col justify-center items-center ${
-                          formData.gstCertificateImage
-                            ? 'border-emerald-500/60 bg-emerald-50/50'
-                            : 'border-slate-300 hover:border-emerald-500/60 hover:bg-emerald-50/20 bg-white'
-                        }`}
-                      >
-                        {formData.gstCertificateImage ? (
-                          <div className="w-full flex items-center justify-between text-left">
-                            <div className="flex items-center gap-2 overflow-hidden">
-                              <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
-                              <div className="truncate">
-                                <p className="text-[11px] font-bold text-slate-900 truncate">
-                                  {formData.gstCertificateImage.name}
-                                </p>
-                                <p className="text-[10px] text-emerald-700 font-semibold">
-                                  GST Attached • {formData.gstCertificateImage.size}
-                                </p>
-                              </div>
-                            </div>
-                            <button
-                              type="button"
-                              onClick={(e) => handleRemoveFile('gstCertificateImage', e)}
-                              className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer"
-                              title="Remove GST"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
-                        ) : (
-                          <div className="py-1">
-                            <Upload className="w-4 h-4 text-slate-400 mx-auto mb-1" />
-                            <p className="text-[11px] font-bold text-slate-800">Upload GST Certificate</p>
-                            <p className="text-[10px] text-slate-400">Form REG-06</p>
-                          </div>
-                        )}
-                      </div>
-                    </div>
                   </div>
                 </div>
               </div>
@@ -1810,7 +1748,7 @@ export function RegisterPage() {
                     </p>
                     <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 font-semibold">
                       <Check className="w-3.5 h-3.5 text-emerald-600" />
-                      <span className="truncate">{formData.panCardImage?.name ? 'Document Attached' : 'Format Validated'}</span>
+                      <span className="truncate">PAN Format Validated</span>
                     </div>
                   </div>
 
@@ -1824,7 +1762,7 @@ export function RegisterPage() {
                     </p>
                     <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 font-semibold">
                       <Check className="w-3.5 h-3.5 text-emerald-600" />
-                      <span className="truncate">{formData.aadhaarCardImage?.name ? 'Document Attached' : 'UIDAI Format Validated'}</span>
+                      <span className="truncate">UIDAI Format Validated</span>
                     </div>
                   </div>
 
@@ -1838,66 +1776,22 @@ export function RegisterPage() {
                     </p>
                     <div className="flex items-center gap-1.5 text-[11px] text-emerald-700 font-semibold">
                       <Check className="w-3.5 h-3.5 text-emerald-600" />
-                      <span className="truncate">{formData.gstCertificateImage?.name ? 'Certificate Attached' : '15-Digit GST Validated'}</span>
+                      <span className="truncate">15-Digit GST Validated</span>
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* 2. Document Vault Status Cards */}
-              <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-black text-slate-800 uppercase tracking-wider">
-                    Document Vault Status
-                  </h4>
-                  <span className="text-[11px] text-slate-500 font-medium">3 Documents for Verification</span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 text-xs">
-                  <div className="p-2.5 bg-white rounded-xl border border-slate-200 flex items-center justify-between">
-                    <div className="flex items-center gap-2 overflow-hidden">
-                      <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <div className="truncate">
-                        <p className="text-[11px] font-bold text-slate-900 truncate">
-                          {formData.panCardImage?.name || 'PAN Card Document'}
-                        </p>
-                        <p className="text-[10px] text-slate-500">
-                          {formData.panCardImage?.size || 'Attached'}
-                        </p>
-                      </div>
-                    </div>
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" title="Ready" />
-                  </div>
-
-                  <div className="p-2.5 bg-white rounded-xl border border-slate-200 flex items-center justify-between">
-                    <div className="flex items-center gap-2 overflow-hidden">
-                      <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <div className="truncate">
-                        <p className="text-[11px] font-bold text-slate-900 truncate">
-                          {formData.aadhaarCardImage?.name || 'Aadhaar Card Document'}
-                        </p>
-                        <p className="text-[10px] text-slate-500">
-                          {formData.aadhaarCardImage?.size || 'Linked with UIDAI'}
-                        </p>
-                      </div>
-                    </div>
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" title="Ready" />
-                  </div>
-
-                  <div className="p-2.5 bg-white rounded-xl border border-slate-200 flex items-center justify-between">
-                    <div className="flex items-center gap-2 overflow-hidden">
-                      <FileText className="w-4 h-4 text-emerald-600 shrink-0" />
-                      <div className="truncate">
-                        <p className="text-[11px] font-bold text-slate-900 truncate">
-                          {formData.gstCertificateImage?.name || 'GST Registration Certificate'}
-                        </p>
-                        <p className="text-[10px] text-slate-500">
-                          {formData.gstCertificateImage?.size || 'Form REG-06 Linked'}
-                        </p>
-                      </div>
-                    </div>
-                    <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" title="Ready" />
-                  </div>
+              {/* 2. Document Vault Policy Notice */}
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-2xl flex items-start gap-3">
+                <FileText className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                <div className="text-xs space-y-1">
+                  <p className="font-bold text-slate-800">
+                    Document Vault Verification
+                  </p>
+                  <p className="text-[11px] text-slate-600 leading-relaxed">
+                    Physical/digital document proofs are not required during registration. Following account verification, you can upload and maintain your statutory certificates anytime under <span className="font-semibold text-slate-800">Company Profile → Documents</span> in your seller dashboard.
+                  </p>
                 </div>
               </div>
 

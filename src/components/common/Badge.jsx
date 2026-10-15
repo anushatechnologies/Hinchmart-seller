@@ -84,6 +84,7 @@ export function StatusBadge({ status, className }) {
       'under review',
       'low stock',
       'new',
+      'placed',
       'draft',
       'documents pending',
     ].includes(normalized)
@@ -95,6 +96,7 @@ export function StatusBadge({ status, className }) {
     variant = 'danger';
   } else if (
     [
+      'confirmed',
       'processing',
       'packed',
       'packed / ready for dispatch',

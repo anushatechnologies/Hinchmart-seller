@@ -23,13 +23,13 @@ export function normalizeStatusFilter(rawStatus) {
   const s = String(rawStatus).trim().toLowerCase();
 
   if (s === 'all') return 'all';
-  if (s === 'pending' || s === 'new' || s === 'new / pending') return 'pending';
+  if (s === 'pending' || s === 'new' || s === 'new / pending' || s === 'placed') return 'pending';
   if (s === 'confirmed') return 'confirmed';
   if (s === 'processing') return 'processing';
   if (s === 'packed / ready' || s === 'packed' || s === 'ready' || s === 'ready for dispatch') {
     return 'packed / ready';
   }
-  if (s === 'dispatched') return 'dispatched';
+  if (s === 'dispatched' || s === 'shipped') return 'dispatched';
   if (s === 'in transit' || s === 'in-transit') return 'in transit';
   if (s === 'delivered') return 'delivered';
   if (s === 'completed') return 'completed';
@@ -50,21 +50,22 @@ export function orderMatchesStatus(orderStatus, canonicalFilter) {
 
   switch (canonicalFilter) {
     case 'pending':
-      return s === 'pending' || s === 'new';
+      return s === 'pending' || s === 'new' || s === 'placed';
     case 'confirmed':
       return s === 'confirmed';
     case 'processing':
       return s === 'processing';
     case 'packed / ready':
       return ['ready for dispatch', 'packed / ready', 'packed', 'ready'].includes(s);
+    case 'shipped':
     case 'dispatched':
-      return s === 'dispatched';
+      return ['dispatched', 'shipped', 'in transit'].includes(s);
     case 'in transit':
       return s === 'in transit';
     case 'delivered':
       return s === 'delivered' || s === 'completed';
     case 'completed':
-      return s === 'completed';
+      return s === 'completed' || s === 'delivered';
     case 'cancelled':
       return s === 'cancelled';
     default:

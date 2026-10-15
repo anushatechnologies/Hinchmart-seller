@@ -646,45 +646,54 @@ export const sellerOnboardingService = {
    */
   async getDocumentVault(sellerId) {
     const cleanId = normalizeSellerId(sellerId);
-    if (!cleanId) {
-      const localDocs = (db.getDocuments() || []).map(d => normalizeDocumentItem(d));
-      return {
-        success: true,
-        progressText: `${localDocs.filter(d => d.status !== 'Not Uploaded').length} of 3 submitted`,
-        documents: localDocs,
-      };
-    }
+    let backendDocs = [];
 
     if (canAccessSellerApi('/api/seller/documents')) {
       try {
         const response = await apiClient.get('/api/seller/documents');
         const rawData = response.data?.data || response.data || [];
         if (Array.isArray(rawData)) {
-          const normalizedDocs = rawData.map(d => normalizeDocumentItem(d));
-          const uploadedCount = normalizedDocs.filter(d => d.status !== 'Not Uploaded').length;
-          return {
-            success: true,
-            sellerId: cleanId,
-            progressText: `${uploadedCount} of 3 submitted`,
-            documents: normalizedDocs,
-            raw: rawData,
-            status: 'PENDING',
-          };
+          backendDocs = rawData.map((d) => normalizeDocumentItem(d));
         }
       } catch (apiError) {
         // Quiet fallback
       }
     }
 
-    await delay(100);
-    const localDocs = ((db.getDocuments ? db.getDocuments() : []) || []).map(d => normalizeDocumentItem(d));
-    const uploadedCount = localDocs.filter(d => d.status !== 'Not Uploaded').length;
+    const localDocs = ((db.getDocuments ? db.getDocuments() : []) || []).map((d) => normalizeDocumentItem(d));
+    let storedPhotos = {};
+    if (typeof localStorage !== 'undefined') {
+      try {
+        storedPhotos = JSON.parse(localStorage.getItem('hinchmart_kyc_photos') || '{}');
+      } catch (_) {}
+    }
+
+    const docKeys = ['PAN', 'AADHAAR', 'GST'];
+    const mergedDocs = docKeys.map((k) => {
+      const bDoc = backendDocs.find((d) => (d.documentType || d.type || '').toUpperCase().includes(k));
+      const lDoc = localDocs.find((d) => (d.documentType || d.type || '').toUpperCase().includes(k));
+      const pPhoto = storedPhotos[k === 'GST' ? 'GSTIN' : k] || storedPhotos[k];
+
+      const item = { ...(bDoc || lDoc || { type: k, documentType: k, status: 'Not Uploaded' }) };
+      if (lDoc && (lDoc.fileName || lDoc.fileUrl || lDoc.photoUrl)) {
+        Object.assign(item, lDoc);
+      }
+      if (pPhoto && pPhoto.dataUrl) {
+        item.fileUrl = pPhoto.dataUrl;
+        item.photoUrl = pPhoto.dataUrl;
+        item.fileName = pPhoto.fileName || item.fileName || `${k.toLowerCase()}_card.jpg`;
+        if (item.status === 'Not Uploaded') item.status = 'Pending';
+      }
+      return item;
+    });
+
+    const uploadedCount = mergedDocs.filter((d) => d.status !== 'Not Uploaded' && (d.fileUrl || d.fileName)).length;
     return {
       success: true,
       sellerId: cleanId,
-      isMock: true,
       progressText: `${uploadedCount} of 3 submitted`,
-      documents: localDocs,
+      documents: mergedDocs,
+      status: uploadedCount >= 3 ? 'UNDER_REVIEW' : 'PENDING',
     };
   },
 
@@ -692,7 +701,7 @@ export const sellerOnboardingService = {
    * 8. Upload Mandatory Document (PAN, AADHAAR, GST)
    * Supports BOTH exact real KYC files and dummy test files
    */
-  async uploadMandatoryDocument(sellerId, documentType, file) {
+  async uploadMandatoryDocument(sellerId, documentType, file, explicitFileUrl = null) {
     const cleanId = normalizeSellerId(sellerId);
     if (!file) {
       throw new Error('Please select a document file to upload.');
@@ -729,9 +738,11 @@ export const sellerOnboardingService = {
         const resData = response.data?.data || response.data;
         if (resData) {
           const normalized = normalizeDocumentItem(resData, apiDocType);
+          const activePhotoUrl = explicitFileUrl || normalized.fileUrl || null;
           db.saveComplianceDocument(normalized.type, {
             fileName: normalized.fileName || fileName,
-            fileUrl: normalized.fileUrl,
+            fileUrl: activePhotoUrl,
+            photoUrl: activePhotoUrl,
             fileSize: normalized.fileSize || fileSizeFormatted,
             status: 'Pending',
             notes: 'Submitted for statutory compliance audit & verification by Admin',
@@ -739,7 +750,7 @@ export const sellerOnboardingService = {
           return {
             success: true,
             sellerId: cleanId,
-            document: normalized,
+            document: { ...normalized, fileUrl: activePhotoUrl, photoUrl: activePhotoUrl },
             message: response.data?.message || `${normalized.title} uploaded successfully`,
           };
         }
@@ -749,16 +760,44 @@ export const sellerOnboardingService = {
     }
 
     // 2. Local Fallback (Supports any dummy or real file)
-    await delay(250);
+    let photoDataUrl = explicitFileUrl || null;
+    if (!photoDataUrl && (uploadFile instanceof File || uploadFile instanceof Blob)) {
+      try {
+        photoDataUrl = await new Promise((resolve) => {
+          const reader = new FileReader();
+          reader.onload = (e) => resolve(e.target?.result || null);
+          reader.onerror = () => resolve(null);
+          reader.readAsDataURL(uploadFile);
+        });
+      } catch (_) {}
+    }
+
+    await delay(150);
     const mockSaved = db.saveComplianceDocument(
       apiDocType === 'PAN' ? 'PAN Document' : apiDocType === 'AADHAAR' ? 'Aadhaar Document' : 'GST Certificate',
       {
         fileName,
         fileSize: fileSizeFormatted,
+        fileUrl: photoDataUrl || null,
+        photoUrl: photoDataUrl || null,
         status: 'Pending',
         notes: 'Submitted for statutory compliance audit & verification by Admin',
       }
     );
+
+    // Save to persistent localStorage kyc photos
+    if (photoDataUrl && typeof localStorage !== 'undefined') {
+      try {
+        const stored = JSON.parse(localStorage.getItem('hinchmart_kyc_photos') || '{}');
+        stored[apiDocType] = {
+          dataUrl: photoDataUrl,
+          fileName,
+          fileSize: fileSizeFormatted,
+          uploadedAt: new Date().toISOString(),
+        };
+        localStorage.setItem('hinchmart_kyc_photos', JSON.stringify(stored));
+      } catch (_) {}
+    }
 
     return {
       success: true,

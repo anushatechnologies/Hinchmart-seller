@@ -17,10 +17,20 @@ export function ProductStatusBadge({ status, product, className = '' }) {
       product?.approvalStatus === 'DELETED_BY_ADMIN'
     );
 
+  const isApproved =
+    status === 'APPROVED' ||
+    status === 'ACTIVE' ||
+    product?.status === 'APPROVED' ||
+    product?.status === 'ACTIVE' ||
+    product?.approvalStatus === 'APPROVED' ||
+    Boolean(product?.active);
+
   const normalizedStatus = isExplicitlyDeletedByAdmin
     ? 'DELETED_BY_ADMIN'
     : isRejected
     ? 'REJECTED'
+    : isApproved
+    ? 'APPROVED'
     : String(status || product?.status || 'PENDING').toUpperCase();
 
   switch (normalizedStatus) {

@@ -472,7 +472,7 @@ export const db = {
     ];
     setStorage(DB_KEYS.REGISTERED_SELLERS, updatedList);
 
-    // If PAN Card file provided, upload to Document Vault as Pending
+    // If statutory document files provided, upload to Document Vault as Pending
     if (sellerData.panCardImage) {
       const fileInfo = sellerData.panCardImage;
       this.uploadDocument({
@@ -480,7 +480,34 @@ export const db = {
         type: 'PAN Document',
         fileName: fileInfo.name || 'PAN_Card.jpg',
         fileSize: fileInfo.size || '1.2 MB',
-        fileUrl: fileInfo.previewUrl || '/mock/docs/pan_card.jpg',
+        fileUrl: fileInfo.dataUrl || fileInfo.previewUrl || fileInfo.url || null,
+        photoUrl: fileInfo.dataUrl || fileInfo.previewUrl || fileInfo.url || null,
+        status: 'Pending',
+        notes: 'Submitted during business onboarding registration',
+      });
+    }
+    if (sellerData.aadhaarCardImage) {
+      const fileInfo = sellerData.aadhaarCardImage;
+      this.uploadDocument({
+        name: 'Aadhaar Card',
+        type: 'Aadhaar Document',
+        fileName: fileInfo.name || 'Aadhaar_Card.jpg',
+        fileSize: fileInfo.size || '1.1 MB',
+        fileUrl: fileInfo.dataUrl || fileInfo.previewUrl || fileInfo.url || null,
+        photoUrl: fileInfo.dataUrl || fileInfo.previewUrl || fileInfo.url || null,
+        status: 'Pending',
+        notes: 'Submitted during business onboarding registration',
+      });
+    }
+    if (sellerData.gstCertificateImage) {
+      const fileInfo = sellerData.gstCertificateImage;
+      this.uploadDocument({
+        name: 'GST Registration Certificate (Form REG-06)',
+        type: 'GST Certificate',
+        fileName: fileInfo.name || 'GST_Certificate.pdf',
+        fileSize: fileInfo.size || '1.5 MB',
+        fileUrl: fileInfo.dataUrl || fileInfo.previewUrl || fileInfo.url || null,
+        photoUrl: fileInfo.dataUrl || fileInfo.previewUrl || fileInfo.url || null,
         status: 'Pending',
         notes: 'Submitted during business onboarding registration',
       });
@@ -927,7 +954,7 @@ export const db = {
 
         if (adminMatch) {
           const admStatus = String(adminMatch.status || adminMatch.approvalStatus || '').toUpperCase();
-          if (admStatus === 'APPROVED' || adminMatch.active === true) {
+          if (admStatus === 'APPROVED' || admStatus === 'ACTIVE' || admStatus === 'LIVE' || adminMatch.active === true) {
             status = 'APPROVED';
             approvalStatus = 'APPROVED';
             isDeletedByAdmin = false;
@@ -945,6 +972,23 @@ export const db = {
           approvalStatus = 'DELETED_BY_ADMIN';
         }
 
+        const rawImgs = Array.isArray(p.images) ? p.images : (p.imageUrl ? [p.imageUrl] : []);
+        const cleanImgs = rawImgs.filter(
+          (img) => typeof img === 'string' &&
+            !img.includes('31d48b2a-3193-48fa-836a-86c89343b90d') &&
+            !img.includes('photo-1589939705384-5185137a7f0f') &&
+            !img.endsWith('.pdf')
+        );
+        const cleanImgUrl = cleanImgs[0] || (
+          p.imageUrl &&
+          typeof p.imageUrl === 'string' &&
+          !p.imageUrl.includes('31d48b2a-3193-48fa-836a-86c89343b90d') &&
+          !p.imageUrl.includes('photo-1589939705384-5185137a7f0f') &&
+          !p.imageUrl.endsWith('.pdf')
+            ? p.imageUrl
+            : null
+        );
+
         const normalizedProd = {
           ...p,
           sellerId: cleanId,
@@ -952,6 +996,9 @@ export const db = {
           approvalStatus,
           deletedByAdmin: isDeletedByAdmin,
           active: isDeletedByAdmin ? false : (status === 'APPROVED'),
+          images: cleanImgs,
+          imageUrl: cleanImgUrl,
+          image: cleanImgUrl,
         };
 
         allProducts.push(normalizedProd);
@@ -2037,11 +2084,12 @@ export const db = {
           ? 'Aadhaar Card'
           : 'GST Registration Certificate (Form REG-06)',
       type: normalizedType,
-      documentNumber: data.documentNumber || data.number || '',
-      fileName: data.fileName || `${normalizedType.toLowerCase().replace(/\s+/g, '_')}_2026.pdf`,
-      fileSize: data.fileSize || '1.1 MB',
-      fileUrl: data.fileUrl || '/mock/docs/sample.pdf',
-      status: data.status || 'Pending',
+      documentNumber: data.documentNumber || data.number || (existingIndex >= 0 ? documents[existingIndex]?.documentNumber : '') || '',
+      fileName: data.fileName || (existingIndex >= 0 ? documents[existingIndex]?.fileName : null) || `${normalizedType.toLowerCase().replace(/\s+/g, '_')}_document.jpg`,
+      fileSize: data.fileSize || (existingIndex >= 0 ? documents[existingIndex]?.fileSize : null) || '1.1 MB',
+      fileUrl: data.fileUrl || data.photoUrl || (existingIndex >= 0 ? documents[existingIndex]?.fileUrl : null) || null,
+      photoUrl: data.photoUrl || data.fileUrl || (existingIndex >= 0 ? documents[existingIndex]?.photoUrl : null) || null,
+      status: data.status || (existingIndex >= 0 ? documents[existingIndex]?.status : 'Pending') || 'Pending',
       notes: data.notes || 'Submitted for statutory audit & verification by Admin',
       uploadedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
@@ -2061,6 +2109,22 @@ export const db = {
 
     setStorage(DB_KEYS.DOCUMENTS, updatedDocs);
     this.syncSellerVerification(updatedDocs);
+
+    // Also mirror into hinchmart_kyc_photos in localStorage
+    if ((docPayload.photoUrl || docPayload.fileUrl) && typeof localStorage !== 'undefined') {
+      try {
+        const typeKey = normalizedType === 'PAN Document' ? 'PAN' : normalizedType === 'Aadhaar Document' ? 'AADHAAR' : 'GSTIN';
+        const kycStored = JSON.parse(localStorage.getItem('hinchmart_kyc_photos') || '{}');
+        kycStored[typeKey] = {
+          dataUrl: docPayload.photoUrl || docPayload.fileUrl,
+          fileName: docPayload.fileName,
+          fileSize: docPayload.fileSize,
+          docNumber: docPayload.documentNumber,
+          uploadedAt: new Date().toISOString(),
+        };
+        localStorage.setItem('hinchmart_kyc_photos', JSON.stringify(kycStored));
+      } catch (_) {}
+    }
 
     // Also sync with seller profile
     const seller = this.getSeller();

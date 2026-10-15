@@ -34,6 +34,7 @@ import {
   Clock,
   Warehouse,
   Users,
+  User,
   Building2,
   Layers,
   FileSpreadsheet,
@@ -196,9 +197,199 @@ export function DashboardPage() {
   }));
 
   return (
-    <div className="space-y-6">
-      {/* 1. TOP HEADER: Business Control Center Banner with Glassmorphism Effect */}
-      <div className="relative overflow-hidden bg-gradient-to-br from-white/95 via-slate-50/90 to-emerald-50/50 rounded-xl sm:rounded-2xl p-4 sm:p-7 shadow-sm shadow-emerald-950/5 border border-slate-200/90 backdrop-blur-xl">
+    <>
+      {/* ================= PHONE VIEW DASHBOARD (Matches Phone Screenshot 1 Exactly) ================= */}
+      {/* ================= PHONE VIEW DASHBOARD (Matches Phone Screenshot 1 Exactly) ================= */}
+      <div className="block md:hidden space-y-3.5 pb-2">
+        {/* 1. Good Morning Card */}
+        <div className="bg-white rounded-xl p-4 shadow-2xs border border-slate-100 flex items-center gap-3.5">
+          <div className="w-12 h-12 rounded-full bg-[#EDF3F8] flex items-center justify-center shrink-0 border border-slate-200/70 text-slate-600">
+            <User className="w-6 h-6 text-slate-500" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-xs text-slate-500 font-medium leading-none">{getGreeting()},</p>
+            <h2 className="text-base font-bold text-slate-900 leading-snug mt-0.5 truncate">
+              {profile?.name || user?.name || 'Seller'}
+            </h2>
+            <p className="text-[11px] text-slate-400 leading-tight mt-0.5">
+              Manage your products, orders and grow with hinchmart
+            </p>
+          </div>
+        </div>
+
+        {/* 2. 2x2 Metric Cards Grid (Exact match to Screen 1) */}
+        <div className="grid grid-cols-2 gap-2.5">
+          {/* Total Products */}
+          <Link
+            to="/seller/products"
+            className="bg-white rounded-xl p-3.5 border border-slate-100 shadow-2xs block hover:border-blue-200 transition-all"
+          >
+            <div className="w-8 h-8 rounded-lg bg-[#EBF3FE] text-[#1D64ED] flex items-center justify-center mb-2">
+              <Package className="w-4 h-4" />
+            </div>
+            <p className="text-[11px] text-slate-500 font-medium">Total Products</p>
+            <p className="text-xl font-bold text-slate-900 mt-0.5">{products.length}</p>
+          </Link>
+
+          {/* Pending Orders */}
+          <Link
+            to="/seller/orders?status=pending"
+            className="bg-white rounded-xl p-3.5 border border-slate-100 shadow-2xs block hover:border-rose-200 transition-all"
+          >
+            <div className="w-8 h-8 rounded-lg bg-[#FEECEC] text-[#F43F5E] flex items-center justify-center mb-2">
+              <ShoppingCart className="w-4 h-4" />
+            </div>
+            <p className="text-[11px] text-slate-500 font-medium">Pending Orders</p>
+            <p className="text-xl font-bold text-slate-900 mt-0.5">
+              {orders.filter((o) => ['new', 'pending'].includes(String(o.orderStatus || o.status || '').toLowerCase())).length}
+            </p>
+          </Link>
+
+          {/* Low Stock */}
+          <Link
+            to="/seller/inventory/low-stock"
+            className="bg-white rounded-xl p-3.5 border border-slate-100 shadow-2xs block hover:border-amber-200 transition-all"
+          >
+            <div className="w-8 h-8 rounded-lg bg-[#FFF4E6] text-[#F59E0B] flex items-center justify-center mb-2">
+              <AlertTriangle className="w-4 h-4" />
+            </div>
+            <p className="text-[11px] text-slate-500 font-medium">Low Stock</p>
+            <p className="text-xl font-bold text-slate-900 mt-0.5">{lowStockItems.length}</p>
+          </Link>
+
+          {/* Revenue */}
+          <Link
+            to="/seller/payments"
+            className="bg-white rounded-xl p-3.5 border border-slate-100 shadow-2xs block hover:border-emerald-200 transition-all"
+          >
+            <div className="w-8 h-8 rounded-lg bg-[#ECFDF5] text-[#10B981] flex items-center justify-center mb-2">
+              <TrendingUp className="w-4 h-4" />
+            </div>
+            <p className="text-[11px] text-slate-500 font-medium">Revenue</p>
+            <p className="text-xl font-bold text-slate-900 mt-0.5 truncate">
+              {formatCurrency(kpis?.totalRevenue || 0)}
+            </p>
+          </Link>
+        </div>
+
+        {/* 3. Sales Overview Card */}
+        <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-2xs">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-bold text-slate-900">Sales Overview</h3>
+            <div className="relative">
+              <select className="text-xs bg-white border border-slate-200 text-slate-600 py-1 px-2.5 rounded-lg focus:outline-none appearance-none pr-6 cursor-pointer shadow-2xs">
+                <option>This Month</option>
+                <option>Last 30 Days</option>
+                <option>This Year</option>
+              </select>
+              <ChevronRight className="w-3 h-3 text-slate-400 absolute right-2 top-2.5 pointer-events-none rotate-90" />
+            </div>
+          </div>
+
+          <div className="mt-2.5 flex items-baseline gap-2">
+            <span className="text-2xl font-bold text-slate-900 tracking-tight">
+              {formatCurrency(kpis?.totalRevenue || 0)}
+            </span>
+            <span className="text-[11px] font-semibold bg-[#ECFDF5] text-emerald-600 px-2 py-0.5 rounded-full inline-flex items-center gap-0.5">
+              <TrendingUp className="w-3 h-3" />
+              {kpis?.revenueGrowth != null ? `${kpis.revenueGrowth >= 0 ? '+' : ''}${kpis.revenueGrowth}%` : '+0%'}
+            </span>
+          </div>
+
+          {/* Smooth Blue Gradient Chart */}
+          <div className="h-36 w-full mt-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart
+                data={
+                  revenueData && revenueData.length > 0
+                    ? revenueData.map((d) => ({
+                        date: d.month || d.date || '',
+                        value: Number(d.revenue || 0),
+                      }))
+                    : [
+                        { date: '1 Oct', value: 0 },
+                        { date: '31 Oct', value: 0 },
+                      ]
+                }
+                margin={{ top: 10, right: 10, left: -25, bottom: 0 }}
+              >
+                <defs>
+                  <linearGradient id="mobileSalesGradient" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#2563eb" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="#2563eb" stopOpacity={0.0} />
+                  </linearGradient>
+                </defs>
+                <XAxis
+                  dataKey="date"
+                  axisLine={false}
+                  tickLine={false}
+                  tick={{ fontSize: 9.5, fill: '#94a3b8' }}
+                />
+                <Tooltip
+                  formatter={(val) => [`₹${val.toLocaleString('en-IN')}`, 'Sales']}
+                  contentStyle={{ borderRadius: '8px', fontSize: '11px', border: '1px solid #e2e8f0' }}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="value"
+                  stroke="#2563eb"
+                  strokeWidth={2.5}
+                  fillOpacity={1}
+                  fill="url(#mobileSalesGradient)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+
+        {/* 4. Recent Activity (Directly below Sales Overview in Screen 1) */}
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <h3 className="text-sm font-bold text-slate-900">Recent Activity</h3>
+            <Link to="/seller/orders" className="text-xs font-semibold text-[#1D64ED] hover:underline">
+              View All
+            </Link>
+          </div>
+
+          {recentOrders.length > 0 ? (
+            <Link
+              to={`/seller/orders/${recentOrders[0].id || recentOrders[0].orderNumber}`}
+              className="bg-white rounded-xl p-3 border border-slate-100 shadow-2xs flex items-center justify-between gap-3 hover:bg-slate-50/50 transition-colors"
+            >
+              <div className="flex items-center gap-3">
+                <div className="w-9 h-9 rounded-full bg-[#ECFDF5] text-[#059669] flex items-center justify-center shrink-0">
+                  <ShoppingCart className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-xs font-bold text-slate-800">
+                    Order #{recentOrders[0].orderNumber || recentOrders[0].id}
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    {recentOrders[0].buyer?.company || recentOrders[0].buyer?.name || 'Customer Order'}
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] text-slate-400 font-medium">
+                  {formatDate(recentOrders[0].createdAt) || 'Recent'}
+                </span>
+                <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+              </div>
+            </Link>
+          ) : (
+            <div className="bg-white rounded-xl p-6 border border-slate-100 text-center">
+              <ShoppingCart className="w-7 h-7 text-slate-300 mx-auto mb-1.5" />
+              <p className="text-xs font-semibold text-slate-700">No recent orders</p>
+              <p className="text-[11px] text-slate-400 mt-0.5">New orders will appear here automatically</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ================= LAPTOP / DESKTOP DASHBOARD (100% Unchanged) ================= */}
+      <div className="hidden md:block space-y-6">
+        {/* 1. TOP HEADER: Business Control Center Banner with Glassmorphism Effect */}
+        <div className="relative overflow-hidden bg-gradient-to-br from-white/95 via-slate-50/90 to-emerald-50/50 rounded-xl sm:rounded-2xl p-4 sm:p-7 shadow-sm shadow-emerald-950/5 border border-slate-200/90 backdrop-blur-xl">
         {/* Ambient Aurora Glow Orbs */}
         <div className="absolute -top-20 -right-20 w-80 h-80 bg-emerald-500/15 rounded-full blur-3xl pointer-events-none" />
         <div className="absolute -bottom-20 -left-20 w-80 h-80 bg-orange-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -1151,5 +1342,6 @@ export function DashboardPage() {
         </form>
       </Modal>
     </div>
+    </>
   );
 }

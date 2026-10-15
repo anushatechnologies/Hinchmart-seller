@@ -129,13 +129,25 @@ export const inventoryService = {
       throw new Error('Stock quantity must be a non-negative number');
     }
 
+    const adjustType = adjustment?.adjustmentType === 'add'
+      ? 'add'
+      : adjustment?.adjustmentType === 'subtract'
+      ? 'subtract'
+      : 'replace';
+
+    // 1. Direct stock update: PATCH /api/seller/products/{id}/stock
+    try {
+      await apiClient.patch(`/api/seller/products/${productId}/stock`, { stockQty: newStock });
+    } catch (_) {}
+
+    // 2. Inventory adjust ledger: POST /api/seller/inventory/adjust
     if (canAccessSellerApi('/api/seller/inventory/adjust')) {
       try {
         await apiClient.post('/api/seller/inventory/adjust', {
           productId: Number(productId) || productId,
           quantity: qty,
-          adjustmentType: normType,
-          reason: reason || 'Manual Stock Adjustment',
+          type: adjustType,
+          warehouseId: adjustment?.warehouseId || undefined,
         });
       } catch (apiErr) {
         // Fallback gracefully

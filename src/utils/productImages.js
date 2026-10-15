@@ -8,9 +8,19 @@ function isValidImageUrl(url) {
   if (!url || typeof url !== 'string') return false;
   const trimmed = url.trim();
   if (!trimmed) return false;
-  // Ignore stale blob: URLs that expire after page reload
-  if (trimmed.startsWith('blob:')) return false;
-  return true;
+  // Blacklist stale table runner image accidentally saved as product fallback
+  if (trimmed.includes('31d48b2a-3193-48fa-836a-86c89343b90d')) return false;
+  // Blacklist generic cement stock photo
+  if (trimmed.includes('photo-1589939705384-5185137a7f0f')) return false;
+  // Blacklist PDF document links
+  if (trimmed.endsWith('.pdf')) return false;
+  // Allow data:image/, http/https, and valid URL paths
+  if (trimmed.startsWith('data:image/') || trimmed.startsWith('http://') || trimmed.startsWith('https://') || trimmed.startsWith('/')) {
+    return true;
+  }
+  // Allow blob: URLs if present in active session
+  if (trimmed.startsWith('blob:')) return true;
+  return false;
 }
 
 /**
@@ -20,21 +30,37 @@ export function getCleanProductImages(product = {}) {
   if (!product) return [];
   let rawList = [];
 
-  if (Array.isArray(product.images) && product.images.length > 0) {
-    rawList = product.images;
+  // Parse if stringified JSON array
+  let productImages = product.images;
+  if (typeof productImages === 'string' && productImages.trim().startsWith('[')) {
+    try {
+      productImages = JSON.parse(productImages);
+    } catch (_) {}
+  }
+
+  if (Array.isArray(productImages) && productImages.length > 0) {
+    rawList = productImages;
+  } else if (Array.isArray(product.productImages) && product.productImages.length > 0) {
+    rawList = product.productImages;
+  } else if (Array.isArray(product.photos) && product.photos.length > 0) {
+    rawList = product.photos;
+  } else if (Array.isArray(product.gallery) && product.gallery.length > 0) {
+    rawList = product.gallery;
   } else if (product.imageUrl) {
     rawList = [product.imageUrl];
   } else if (product.image) {
     rawList = [product.image];
   } else if (product.artworkUrl) {
     rawList = [product.artworkUrl];
+  } else if (product.thumbnail) {
+    rawList = [product.thumbnail];
   }
 
   const validUploaded = rawList
     .map((img) => {
       if (typeof img === 'string' && isValidImageUrl(img)) return img.trim();
       if (typeof img === 'object' && img !== null) {
-        const u = img.url || img.previewUrl || img.fileUrl || img.src || null;
+        const u = img.url || img.imageUrl || img.previewUrl || img.fileUrl || img.src || null;
         if (isValidImageUrl(u)) return u.trim();
       }
       return null;
