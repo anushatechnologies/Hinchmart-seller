@@ -72,6 +72,9 @@ export const quotationService = {
       quotedPricePerUnit,
       validUntil,
       notes,
+      freightCharges: Number(quotationData.freightCharges || quotationData.freightCharge || 0),
+      paymentTerms: quotationData.paymentTerms || '50% Advance, 50% on Delivery',
+      deliveryTimeline: quotationData.deliveryTimeline || 'Within 48 hours of PO',
       // Extended fields for local and backwards compatibility
       buyerName: quotationData.buyerName || quotationData.buyer?.name || 'Buyer',
       buyerEmail: quotationData.buyerEmail || quotationData.buyer?.email || 'buyer@example.com',
@@ -80,7 +83,8 @@ export const quotationService = {
       freightCharge: Number(quotationData.freightCharge || quotationData.freightCharges || 0),
       items: (quotationData.items || []).map(i => ({
         productId: Number(i.productId) || i.productId || 1,
-        productTitle: i.productTitle || i.name || 'Product',
+        productTitle: i.productTitle || i.name || i.productName || 'Product',
+        productName: i.productName || i.productTitle || i.name || 'Product',
         quantity: Number(i.quantity || 1),
         unitPrice: Number(i.unitPrice || i.price || quotedPricePerUnit),
         gstRate: Number(i.gstRate || 18),

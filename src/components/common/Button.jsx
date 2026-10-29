@@ -23,17 +23,17 @@ export const Button = React.forwardRef(
 
     const variants = {
       primary:
-        'bg-gradient-to-b from-emerald-500 to-emerald-700 hover:from-emerald-500 hover:to-emerald-800 active:from-emerald-700 active:to-emerald-900 text-white shadow-sm hover:shadow-md hover:shadow-emerald-500/20 focus:ring-emerald-500/50 font-semibold',
+        'bg-gradient-to-r from-amber-500 via-amber-600 to-amber-700 hover:from-amber-600 hover:to-amber-800 text-slate-950 shadow-sm hover:shadow-md hover:shadow-amber-500/25 focus:ring-amber-500/50 font-bold',
       accent:
-        'bg-gradient-to-b from-orange-400 to-orange-600 hover:from-orange-500 hover:to-orange-700 active:from-orange-600 active:to-orange-800 text-white shadow-sm hover:shadow-md hover:shadow-orange-500/20 focus:ring-orange-500/50 font-semibold',
+        'bg-gradient-to-b from-amber-400 to-amber-600 hover:from-amber-500 hover:to-amber-700 active:from-amber-600 active:to-amber-800 text-slate-950 shadow-sm hover:shadow-md hover:shadow-amber-500/20 focus:ring-amber-500/50 font-bold',
       secondary:
         'bg-white hover:bg-slate-50 active:bg-slate-100 text-slate-700 border border-slate-300 shadow-sm hover:shadow focus:ring-emerald-500/20',
       dark:
-        'bg-gradient-to-b from-slate-800 to-slate-950 hover:from-slate-700 hover:to-slate-900 active:from-slate-900 active:to-slate-950 text-white shadow-sm focus:ring-slate-900/50',
+        'bg-slate-950 hover:bg-slate-900 active:bg-black text-amber-400 border border-amber-500/30 shadow-sm focus:ring-amber-500/40 font-bold',
       danger:
         'bg-gradient-to-b from-rose-500 to-rose-700 hover:from-rose-500 hover:to-rose-800 active:from-rose-700 active:to-rose-900 text-white shadow-sm hover:shadow-md hover:shadow-rose-500/20 focus:ring-rose-500/50',
       outline:
-        'bg-transparent hover:bg-emerald-50 text-emerald-700 border border-emerald-600 focus:ring-emerald-500/30',
+        'bg-transparent hover:bg-amber-50/70 text-amber-700 border border-amber-500 focus:ring-amber-500/30 font-bold',
       ghost:
         'bg-transparent hover:bg-slate-100 text-slate-600 active:bg-slate-200 focus:ring-slate-300',
     };

@@ -196,7 +196,7 @@ export function Sidebar() {
                   onClick={() => setMobileMenuOpen(false)}
                   className={`flex items-center justify-between px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all ${
                     isActive
-                      ? 'bg-blue-600 text-white shadow-xs'
+                      ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-black shadow-xs'
                       : 'text-slate-300 hover:text-white hover:bg-slate-800/50'
                   }`}
                 >
@@ -249,51 +249,57 @@ export function Sidebar() {
         <div className="hidden md:flex flex-col h-full w-full">
           {/* Brand Header */}
           <div className={cn(
-            'flex h-16 shrink-0 items-center border-b border-slate-800/80 bg-[#0B132B] transition-all',
-            isExpanded ? 'justify-between pl-3 pr-2' : 'justify-center px-2'
+            'flex h-16 shrink-0 items-center border-b border-slate-800/80 bg-[#0B132B] transition-all px-3',
+            isExpanded ? 'justify-between' : 'justify-center'
           )}>
             {isExpanded ? (
-              <>
-                <div className="flex items-center overflow-hidden">
-                  <BrandLogo size="sidebar" theme="dark" to="/seller/dashboard" showBadge={true} badgeText="SELLER WEB HUB" />
+              <div className="flex items-center justify-between w-full min-w-0">
+                <div className="flex items-center min-w-0">
+                  <BrandLogo
+                    size="sidebar"
+                    theme="dark"
+                    to="/seller/dashboard"
+                    showBadge={true}
+                    badgeText="SELLER"
+                  />
                 </div>
 
-                <div className="flex items-center gap-1">
+                <div className="flex items-center shrink-0 ml-1">
                   {/* Desktop Collapse Toggle */}
                   <button
-                  type="button"
-                  onClick={toggleSidebar}
-                  className="hidden md:flex p-2 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800/70 transition-colors cursor-pointer"
-                  title="Collapse Sidebar"
-                  aria-label="Collapse Sidebar"
-                >
-                  <PanelLeftClose className="w-5 h-5" />
-                </button>
+                    type="button"
+                    onClick={toggleSidebar}
+                    className="hidden md:flex p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800/70 transition-colors cursor-pointer"
+                    title="Collapse Sidebar"
+                    aria-label="Collapse Sidebar"
+                  >
+                    <PanelLeftClose className="w-5 h-5" />
+                  </button>
 
-                {/* Mobile Close Button */}
-                <button
-                  type="button"
-                  onClick={() => setMobileMenuOpen(false)}
-                  className="p-2 text-slate-400 hover:text-white md:hidden cursor-pointer"
-                  aria-label="Close Menu"
-                >
-                  <X className="w-5 h-5" />
-                </button>
+                  {/* Mobile Close Button */}
+                  <button
+                    type="button"
+                    onClick={() => setMobileMenuOpen(false)}
+                    className="p-1.5 text-slate-400 hover:text-white md:hidden cursor-pointer"
+                    aria-label="Close Menu"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
-            </>
-          ) : (
-            /* Collapsed State: Neat and clean centered toggle button */
-            <button
-              type="button"
-              onClick={toggleSidebar}
-              className="hidden md:flex w-10 h-10 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 text-slate-300 hover:text-white items-center justify-center shadow-2xs transition-all cursor-pointer group"
-              title="Expand Sidebar"
-              aria-label="Expand Sidebar"
-            >
-              <PanelLeft className="w-5 h-5 group-hover:scale-105 transition-transform" />
-            </button>
-          )}
-        </div>
+            ) : (
+              /* Collapsed State: Neat and clean centered toggle button */
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                className="hidden md:flex w-10 h-10 rounded-xl bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 text-slate-300 hover:text-white items-center justify-center shadow-2xs transition-all cursor-pointer group"
+                title="Expand Sidebar"
+                aria-label="Expand Sidebar"
+              >
+                <PanelLeft className="w-5 h-5 group-hover:scale-105 transition-transform" />
+              </button>
+            )}
+          </div>
 
         {/* Grouped Navigation */}
         <div className="flex-1 min-h-0 overflow-y-auto px-3 py-3.5 space-y-4 custom-scrollbar">
@@ -351,7 +357,7 @@ export function Sidebar() {
                           {isExpanded && (
                             <div className="flex items-center gap-1.5 shrink-0">
                               {badgeCount > 0 && (
-                                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-blue-600 text-white shadow-xs">
+                                <span className="px-1.5 py-0.5 rounded-full text-[10px] font-bold bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 font-black shadow-xs">
                                   {badgeCount}
                                 </span>
                               )}
@@ -440,7 +446,7 @@ export function Sidebar() {
                           <span
                             className={cn(
                               'px-1.5 py-0.5 rounded-full text-[10px] font-bold shrink-0',
-                              isActive ? 'bg-orange-500 text-white' : 'bg-blue-600 text-white'
+                              isActive ? 'bg-amber-500 text-slate-950 font-black' : 'bg-slate-800 text-amber-400 font-bold border border-amber-500/30'
                             )}
                           >
                             {badgeCount}

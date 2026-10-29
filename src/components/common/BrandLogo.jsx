@@ -3,23 +3,30 @@ import { Link } from 'react-router-dom';
 
 /**
  * Official HinchMart Brand Logo Component
- * Uses the exact official HinchMart logo asset (Blue 'H' + Orange 'M' + Construction Skyline & Typography)
- * Supports responsive proportions, crisp rendering, and seamless dark/light surface integration.
+ * - 100% Transparent, seamless background (no white card, no boxy patchup).
+ * - Automatic surface theme selection:
+ *   - theme="light" (default for light surfaces): Obsidian Black 'HINCH' + Metallic Gold 'MART'.
+ *   - theme="dark" (for dark sidebars/headers): Crisp White 'HINCH' + Metallic Gold 'MART'.
+ * - Preserves native aspect ratio with zero distortion.
  */
-export function BrandLogoIcon({ size = 36, className = '' }) {
+export function BrandLogoIcon({ size = 36, theme = 'light', className = '' }) {
+  const isDark = theme === 'dark';
+  const logoSrc = isDark ? '/assets/logo/hinchmart-logo-dark.png' : '/assets/logo/hinchmart-logo.png';
+  const fallbackSrc = isDark ? '/logo-dark.png' : '/logo.png';
+
   return (
     <div
-      className={`inline-flex items-center justify-center shrink-0 overflow-hidden ${className}`}
+      className={`inline-flex items-center justify-center shrink-0 select-none ${className}`}
       style={{ width: size, height: size }}
     >
       <img
-        src="/assets/logo/hinchmart-logo.png"
+        src={logoSrc}
         alt="HinchMart Icon"
-        className="w-full h-full object-contain filter drop-shadow-xs"
+        className="w-full h-full object-contain"
         loading="eager"
         onError={(e) => {
           e.currentTarget.onerror = null;
-          e.currentTarget.src = '/logo.png';
+          e.currentTarget.src = fallbackSrc;
         }}
       />
     </div>
@@ -29,45 +36,42 @@ export function BrandLogoIcon({ size = 36, className = '' }) {
 export function BrandLogo({
   size = 'md', // 'sm' | 'md' | 'lg' | 'xl' | 'navbar' | 'sidebar' | 'login'
   variant = 'full', // 'full' | 'icon'
-  theme = 'dark', // 'dark' | 'light'
+  theme = 'light', // 'light' | 'dark'
   showBadge = false,
   badgeText = 'SELLER PORTAL',
   to = '/seller/dashboard',
   className = '',
   imgClassName = '',
 }) {
-  // Dimension presets matching official guidelines:
-  // Navbar: ~120-150px | Sidebar: ~140-160px | Login/landing: ~220-280px | Mobile: ~100-140px
+  const isDark = theme === 'dark';
+  const logoSrc = isDark ? '/assets/logo/hinchmart-logo-dark.png' : '/assets/logo/hinchmart-logo.png';
+  const fallbackSrc = isDark ? '/logo-dark.png' : '/logo.png';
+
   const sizeClasses = {
-    sm: 'w-[115px] sm:w-[130px] max-h-9',
-    navbar: 'w-[130px] sm:w-[145px] max-h-10',
-    md: 'w-[145px] sm:w-[155px] max-h-11',
-    sidebar: 'w-[150px] sm:w-[160px] max-h-12',
-    lg: 'w-[230px] sm:w-[260px] max-h-16',
-    login: 'w-[240px] sm:w-[270px] max-h-20',
-    xl: 'w-[280px] sm:w-[320px] max-h-24',
+    sm: 'h-7 w-auto max-w-[100px]',
+    navbar: 'h-8 sm:h-9 w-auto max-w-[130px]',
+    sidebar: 'h-10 w-auto max-w-[125px]',
+    md: 'h-10 sm:h-11 w-auto max-w-[140px]',
+    lg: 'h-12 sm:h-14 w-auto max-w-[200px]',
+    login: 'h-14 sm:h-16 w-auto max-w-[240px]',
+    xl: 'h-16 sm:h-20 w-auto max-w-[280px]',
   };
 
   const selectedSizeClass = sizeClasses[size] || sizeClasses.md;
 
   if (variant === 'icon') {
-    const isLight = theme === 'light';
     const IconContent = (
-      <div className={`inline-flex items-center justify-center ${className}`}>
-        <div className={`w-10 h-10 p-1.5 rounded-xl border shadow-2xs flex items-center justify-center ${
-          isLight ? 'bg-slate-100/90 border-slate-200/80' : 'bg-slate-800/80 border-slate-700/60'
-        }`}>
-          <img
-            src="/assets/logo/hinchmart-logo.png"
-            alt="HinchMart"
-            className="w-full h-full object-contain"
-            loading="eager"
-            onError={(e) => {
-              e.currentTarget.onerror = null;
-              e.currentTarget.src = '/logo.png';
-            }}
-          />
-        </div>
+      <div className={`inline-flex items-center justify-center select-none ${className}`}>
+        <img
+          src={logoSrc}
+          alt="HinchMart"
+          className="w-10 h-10 object-contain"
+          loading="eager"
+          onError={(e) => {
+            e.currentTarget.onerror = null;
+            e.currentTarget.src = fallbackSrc;
+          }}
+        />
       </div>
     );
 
@@ -82,25 +86,23 @@ export function BrandLogo({
   }
 
   const LogoContent = (
-    <div className={`inline-flex flex-col items-start gap-1 select-none ${className}`}>
-      <div className="flex items-center gap-2">
-        <img
-          src="/assets/logo/hinchmart-logo.png"
-          alt="HinchMart - B2B Construction Commerce"
-          className={`h-auto object-contain transition-all duration-150 ${selectedSizeClass} ${imgClassName}`}
-          loading="eager"
-          decoding="async"
-          onError={(e) => {
-            e.currentTarget.onerror = null;
-            e.currentTarget.src = '/logo.png';
-          }}
-        />
-        {showBadge && (
-          <span className="hidden sm:inline-flex px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-orange-500 text-white shadow-2xs">
-            {badgeText}
-          </span>
-        )}
-      </div>
+    <div className={`inline-flex items-center gap-2 select-none bg-transparent ${className}`}>
+      <img
+        src={logoSrc}
+        alt="HinchMart - B2B Construction & Home Materials"
+        className={`object-contain shrink-0 transition-all duration-150 ${selectedSizeClass} ${imgClassName}`}
+        loading="eager"
+        decoding="async"
+        onError={(e) => {
+          e.currentTarget.onerror = null;
+          e.currentTarget.src = fallbackSrc;
+        }}
+      />
+      {showBadge && (
+        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-black uppercase tracking-wider bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-xs shrink-0">
+          {badgeText}
+        </span>
+      )}
     </div>
   );
 
@@ -108,7 +110,7 @@ export function BrandLogo({
     return (
       <Link
         to={to}
-        className="inline-flex items-center transition-opacity hover:opacity-95 cursor-pointer focus:outline-none"
+        className="inline-flex items-center transition-opacity hover:opacity-95 cursor-pointer focus:outline-none bg-transparent"
         title="HinchMart Seller Portal"
       >
         {LogoContent}
@@ -118,4 +120,3 @@ export function BrandLogo({
 
   return LogoContent;
 }
-

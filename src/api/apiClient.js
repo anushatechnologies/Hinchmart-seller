@@ -8,10 +8,12 @@ import apiClient, {
   markSellerApiAllowed,
   canAccessSellerApi,
   delay,
+  sellerApi,
 } from '../services/apiClient.js';
 
 export {
   API_BASE_URL,
+  sellerApi,
   USE_MOCK_API,
   hasValidLiveAuth,
   isSellerApiForbidden,

@@ -1,3 +1,4 @@
+import { discountService } from './discount.service.js';
 import { apiClient, delay, USE_MOCK_API, canAccessSellerApi } from './api.js';
 import { db } from '../mock/db.js';
 
@@ -177,3 +178,5 @@ export const pricingService = {
     return { id, status: 'PENDING', message: 'Discount submitted for admin review.' };
   },
 };
+
+export { discountService };

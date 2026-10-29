@@ -231,6 +231,7 @@ export const authService = {
     const sellerId = cleanSellerId || (cleanMobile ? cleanMobile : `${Date.now()}`);
 
     if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('hinchmart_seller_id', String(sellerId));
       localStorage.setItem('sellerId', String(sellerId));
     }
 
@@ -296,6 +297,8 @@ export const authService = {
       db.clearAuth();
     }
     if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('hinchmart_seller_token');
+      localStorage.removeItem('hinchmart_seller_id');
       localStorage.removeItem('accessToken');
       localStorage.removeItem('sellerToken');
       localStorage.removeItem('authToken');
@@ -364,10 +367,12 @@ export const authService = {
       const data = response.data?.data || response.data;
       if (data) {
         if (data.accessToken && typeof localStorage !== 'undefined') {
+          localStorage.setItem('hinchmart_seller_token', data.accessToken);
           localStorage.setItem('accessToken', data.accessToken);
           localStorage.setItem('sellerToken', data.accessToken);
           localStorage.setItem('authToken', data.accessToken);
           if (data.sellerId) {
+            localStorage.setItem('hinchmart_seller_id', String(data.sellerId));
             localStorage.setItem('sellerId', String(data.sellerId));
           }
         }

@@ -1033,6 +1033,8 @@ export const categoryService = {
     const catName = requestData.categoryName || requestData.name || '';
     const payload = {
       name: catName,
+      slug: requestData.slug || catName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+      imageUrl: requestData.imageUrl || null,
       categoryName: catName,
       description: requestData.description || '',
     };

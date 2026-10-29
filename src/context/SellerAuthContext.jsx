@@ -97,6 +97,7 @@ export const SellerAuthProvider = ({ children }) => {
         setSellerProfile(resolvedProfile);
 
         if (resolvedProfile.sellerId) {
+          localStorage.setItem('hinchmart_seller_id', String(resolvedProfile.sellerId));
           localStorage.setItem('sellerId', String(resolvedProfile.sellerId));
           localStorage.setItem('seller_role', resolvedProfile.role);
           localStorage.setItem('seller_onboarding_status', resolvedProfile.onboardingStatus);
@@ -104,6 +105,7 @@ export const SellerAuthProvider = ({ children }) => {
             markSellerApiAllowed();
           }
         } else {
+          localStorage.removeItem('hinchmart_seller_id');
           localStorage.removeItem('sellerId');
           localStorage.removeItem('seller_role');
           localStorage.removeItem('seller_onboarding_status');

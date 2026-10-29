@@ -1,4 +1,4 @@
-import axios from 'axios';
+﻿import axios from 'axios';
 import { auth } from '../config/firebase.js';
 import { db } from '../mock/db.js';
 import { formatNameFromEmail } from '../utils/formatters.js';
@@ -20,6 +20,7 @@ let activeSyncPromise = null;
 export function getStoredBackendToken() {
   if (typeof localStorage === 'undefined') return null;
   const token =
+    localStorage.getItem('hinchmart_seller_token') ||
     localStorage.getItem('accessToken') ||
     localStorage.getItem('sellerToken') ||
     localStorage.getItem('authToken') ||
@@ -65,10 +66,12 @@ async function exchangeFirebaseTokenForBackendToken(firebaseToken, profile = {})
     const data = res.data?.data || res.data;
     const accessToken = data?.accessToken || data?.token;
     if (accessToken && typeof localStorage !== 'undefined') {
+      localStorage.setItem('hinchmart_seller_token', accessToken);
       localStorage.setItem('accessToken', accessToken);
       localStorage.setItem('sellerToken', accessToken);
       localStorage.setItem('authToken', accessToken);
       if (data?.sellerId) {
+        localStorage.setItem('hinchmart_seller_id', String(data.sellerId));
         localStorage.setItem('sellerId', String(data.sellerId));
       }
     }
@@ -256,5 +259,6 @@ apiClient.interceptors.response.use(
   }
 );
 
+export const sellerApi = apiClient;
 export const delay = (ms = 150) => new Promise((resolve) => setTimeout(resolve, ms));
 export default apiClient;

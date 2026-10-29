@@ -39,6 +39,7 @@ export function AddProductModal({ isOpen, onClose, initialData = {} }) {
 
   // Pricing & Inventory State
   const [price, setPrice] = useState(initialData.price || '');
+  const [mrp, setMrp] = useState(initialData.mrp || '');
   const [unit, setUnit] = useState(initialData.unit || '');
   const [moq, setMoq] = useState(initialData.moq || '1');
   const [stock, setStock] = useState(initialData.stock || '');
@@ -56,6 +57,15 @@ export function AddProductModal({ isOpen, onClose, initialData = {} }) {
   const [approvalStatus, setApprovalStatus] = useState(initialData.approvalStatus || 'PENDING');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [specifications, setSpecifications] = useState(initialData.specifications || {});
+
+  const handlePriceChange = (val) => {
+    setPrice(val);
+    if (val && !isNaN(parseFloat(val)) && (!mrp || parseFloat(mrp) <= parseFloat(val))) {
+      setMrp(String(Math.round(parseFloat(val) * 1.15)));
+    } else if (!val) {
+      setMrp('');
+    }
+  };
 
   const handleSpecChange = (field, value) => {
     setSpecifications((prev) => {
@@ -96,6 +106,8 @@ export function AddProductModal({ isOpen, onClose, initialData = {} }) {
       if (initialData.subcategoryId) setSubcategoryId(initialData.subcategoryId);
       if (initialData.brandName) setBrandName(initialData.brandName);
       if (initialData.specifications) setSpecifications(initialData.specifications);
+      if (initialData.price) setPrice(initialData.price);
+      if (initialData.mrp) setMrp(initialData.mrp);
     }
   }, [isOpen, initialData]);
 
@@ -201,7 +213,7 @@ export function AddProductModal({ isOpen, onClose, initialData = {} }) {
       sku: sku.trim() || `SKU-${Date.now().toString().slice(-6)}`,
       price: finalPrice,
       sellingPrice: finalPrice,
-      mrp: finalPrice ? Math.round(finalPrice * 1.15) : 0,
+      mrp: parseFloat(mrp) || (finalPrice ? Math.round(finalPrice * 1.15) : 0),
       unit: unit || 'PIECE',
       moq: finalMoq,
       stock: finalStock,
@@ -269,157 +281,12 @@ export function AddProductModal({ isOpen, onClose, initialData = {} }) {
           {/* ========================================================================= */}
           <div className="bg-white rounded-xl border border-slate-200/90 p-5 shadow-2xs space-y-3.5">
             <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-amber-700">
-              <Building2 className="w-4 h-4 text-amber-500" />
-              <span>4-Tier Catalog Hierarchy Mapping</span>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Category */}
-              <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                  1. Category <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  required
-                  value={categoryId}
-                  onChange={(e) => {
-                    setCategoryId(e.target.value);
-                    setSubcategoryId('');
-                    setBrandName('');
-                  }}
-                  className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:border-amber-500 cursor-pointer shadow-2xs"
-                >
-                  <option value="">-- Select Category --</option>
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Subcategory */}
-              <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                  2. Subcategory <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  required
-                  value={subcategoryId}
-                  onChange={(e) => {
-                    setSubcategoryId(e.target.value);
-                    setBrandName('');
-                  }}
-                  disabled={!categoryId}
-                  className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:border-amber-500 disabled:opacity-50 cursor-pointer shadow-2xs"
-                >
-                  <option value="">-- Select Subcategory --</option>
-                  {subcategories.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Brand */}
-              <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                  3. Brand <span className="text-rose-500">*</span>
-                </label>
-                <select
-                  required
-                  value={brandName}
-                  onChange={(e) => setBrandName(e.target.value)}
-                  disabled={!subcategoryId}
-                  className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-800 focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:border-amber-500 disabled:opacity-50 cursor-pointer shadow-2xs"
-                >
-                  <option value="">
-                    {!subcategoryId ? '-- Select Subcategory First --' : (brands.length === 0 ? '-- No Brands Configured --' : '-- Select Brand --')}
-                  </option>
-                  {brands.map((b) => (
-                    <option key={b.id || b.name} value={b.name}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-          </div>
-
-          {/* ========================================================================= */}
-          {/* CARD 2: PRODUCT IDENTITY (SCREENSHOT 3)                                   */}
-          {/* ========================================================================= */}
-          <div className="bg-white rounded-xl border border-slate-200/90 p-5 shadow-2xs space-y-3.5">
-            <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-amber-700">
-              <Tag className="w-4 h-4 text-amber-500" />
-              <span>Product Identity</span>
-            </div>
-
-            {/* Product Title / Description */}
-            <div>
-              <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                Product Title / Description <span className="text-rose-500">*</span>
-              </label>
-              <input
-                type="text"
-                required
-                placeholder="e.g. Tata Tiscon 550D TMT Rebar (12mm)"
-                value={title}
-                onChange={(e) => handleTitleChange(e.target.value)}
-                className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-xs text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all shadow-2xs"
-              />
-            </div>
-
-            {/* 2-Column: URL Slug & SKU Code */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                  URL Slug <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. tata-tiscon-550d-tmt-rebar-12mm"
-                  value={slug}
-                  onChange={(e) => {
-                    setSlug(e.target.value);
-                    setSlugManuallyEdited(true);
-                  }}
-                  className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all shadow-2xs"
-                />
-                <p className="text-[11px] text-slate-400 mt-1">
-                  Auto-generated SEO identifier for product URL
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-slate-800 mb-1.5">
-                  SKU Code <span className="text-rose-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  placeholder="SKU-870323"
-                  value={sku}
-                  onChange={(e) => setSku(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition-all shadow-2xs"
-                />
-              </div>
-            </div>
-          </div>
-
-          {/* ========================================================================= */}
-          {/* CARD 3: PRICING & INVENTORY (SCREENSHOT 4)                                */}
-          {/* ========================================================================= */}
-          <div className="bg-white rounded-xl border border-slate-200/90 p-5 shadow-2xs space-y-3.5">
-            <div className="flex items-center gap-2 text-xs font-extrabold uppercase tracking-wider text-amber-700">
               <IndianRupee className="w-4 h-4 text-amber-500" />
               <span>Pricing & Inventory</span>
             </div>
 
-            {/* Row 1: Price, Unit, MOQ */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            {/* Row 1: Selling Price, MRP, Unit, MOQ */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <div>
                 <label className="block text-xs font-bold text-slate-800 mb-1.5">
                   Price in INR (₹) <span className="text-rose-500">*</span>
@@ -430,9 +297,25 @@ export function AddProductModal({ isOpen, onClose, initialData = {} }) {
                   required
                   placeholder="0.00"
                   value={price}
-                  onChange={(e) => setPrice(e.target.value)}
+                  onChange={(e) => handlePriceChange(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:border-amber-500 shadow-2xs"
                 />
+                <p className="text-[10px] text-slate-400 mt-1">B2B Selling / Offer Price</p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-800 mb-1.5">
+                  MRP in INR (₹) <span className="text-slate-400 font-normal">(Max Retail Price)</span>
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={mrp}
+                  onChange={(e) => setMrp(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-mono font-bold text-slate-900 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-amber-500 focus:border-amber-500 shadow-2xs"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">Printed Maximum Retail Price</p>
               </div>
 
               <div>
@@ -458,6 +341,7 @@ export function AddProductModal({ isOpen, onClose, initialData = {} }) {
                   <option value="Meter">Meter (Rmt)</option>
                   <option value="Litre">Litre (L)</option>
                 </select>
+                <p className="text-[10px] text-slate-400 mt-1">Sales Unit of Measure</p>
               </div>
 
               <div>
@@ -472,6 +356,7 @@ export function AddProductModal({ isOpen, onClose, initialData = {} }) {
                   onChange={(e) => setMoq(e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-white border border-slate-200 rounded-lg text-xs font-mono text-slate-800 placeholder:text-slate-400 focus:outline-hidden focus:ring-2 focus:ring-amber-500 shadow-2xs"
                 />
+                <p className="text-[10px] text-slate-400 mt-1">MOQ required to purchase</p>
               </div>
             </div>
 

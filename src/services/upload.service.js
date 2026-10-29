@@ -18,6 +18,72 @@ function fileToBase64(file) {
 
 export const uploadService = {
   /**
+   * 4.8 Upload Single Product Image
+   * POST /api/images/products
+   */
+  async uploadProductImage(file, onProgress) {
+    if (!file) throw new Error('No file provided');
+    if (!USE_MOCK_API) {
+      try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await apiClient.post('/api/images/products', formData, {
+          timeout: 20000,
+          onUploadProgress: (e) => {
+            if (onProgress && e.total) onProgress(Math.round((e.loaded * 100) / e.total));
+          },
+        });
+        const data = res.data?.data || res.data;
+        const url = data?.fileUrl || data?.imageUrl || data?.url;
+        if (url) {
+          return {
+            success: true,
+            fileUrl: url,
+            imageUrl: url,
+            url,
+            imageKey: data?.imageKey || data?.key,
+            fileName: data?.fileName || file.name,
+            fileSize: data?.fileSize || file.size,
+          };
+        }
+      } catch (err) {
+        console.warn('POST /api/images/products fallback:', err?.message);
+      }
+    }
+    return this.uploadFile(file, onProgress, 'products');
+  },
+
+  /**
+   * 4.8 Upload Multiple Product Images
+   * POST /api/images/multiple
+   */
+  async uploadMultipleProductImages(files, onProgress) {
+    if (!files || !files.length) return [];
+    if (!USE_MOCK_API) {
+      try {
+        const formData = new FormData();
+        Array.from(files).forEach((f) => formData.append('files', f));
+        const res = await apiClient.post('/api/images/multiple', formData, {
+          timeout: 30000,
+          onUploadProgress: (e) => {
+            if (onProgress && e.total) onProgress(Math.round((e.loaded * 100) / e.total));
+          },
+        });
+        const data = res.data?.data || res.data;
+        if (Array.isArray(data)) return data;
+        if (data?.files && Array.isArray(data.files)) return data.files;
+      } catch (err) {
+        console.warn('POST /api/images/multiple fallback:', err?.message);
+      }
+    }
+    const uploaded = [];
+    for (const f of files) {
+      const res = await this.uploadFile(f, onProgress, 'products');
+      uploaded.push(res);
+    }
+    return uploaded;
+  },
+  /**
    * 2.1 Upload Product / Brand / Store Image to AWS S3 backend
    * Endpoint: POST /api/images/upload?type=products|stores|brands|categories
    * Content-Type: multipart/form-data

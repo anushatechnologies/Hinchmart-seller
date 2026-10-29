@@ -527,6 +527,28 @@ export const sellerOnboardingService = {
    * 4. Get onboarding summary & document status
    */
   async getOnboardingSummary(sellerId) {
+    const cleanNumericId = safeNumericSellerId(sellerId);
+    if (!USE_MOCK_API && hasValidLiveAuth()) {
+      try {
+        let response;
+        try {
+          response = await apiClient.get(`/api/seller/onboarding/${cleanNumericId}/summary`);
+        } catch (e) {
+          response = await apiClient.get(`/api/sellers/onboarding/${cleanNumericId}/summary`);
+        }
+        const data = response.data?.data || response.data;
+        if (data) {
+          return {
+            success: true,
+            sellerId: cleanNumericId,
+            data,
+            message: 'Onboarding summary retrieved successfully',
+          };
+        }
+      } catch (err) {
+        console.warn('Backend summary check notice:', err?.response?.data?.message || err.message);
+      }
+    }
     await delay(100);
     const currentSeller = db.getSeller() || {};
     return {
@@ -648,9 +670,14 @@ export const sellerOnboardingService = {
     const cleanId = normalizeSellerId(sellerId);
     let backendDocs = [];
 
-    if (canAccessSellerApi('/api/seller/documents')) {
+    if (hasValidLiveAuth() || canAccessSellerApi('/api/seller/documents')) {
       try {
-        const response = await apiClient.get('/api/seller/documents');
+        let response;
+        try {
+          response = await apiClient.get(`/api/seller/onboarding/${cleanId}/documents/vault`);
+        } catch (_) {
+          response = await apiClient.get('/api/seller/documents');
+        }
         const rawData = response.data?.data || response.data || [];
         if (Array.isArray(rawData)) {
           backendDocs = rawData.map((d) => normalizeDocumentItem(d));
@@ -708,13 +735,19 @@ export const sellerOnboardingService = {
     }
 
     const rawType = String(documentType || '').toUpperCase();
-    let apiDocType = 'PAN';
+    let apiDocType = 'PAN_CARD';
     if (rawType.includes('AADHAAR') || rawType.includes('AADHAR')) {
-      apiDocType = 'AADHAAR';
+      apiDocType = 'AADHAAR_CARD';
     } else if (rawType.includes('GST')) {
-      apiDocType = 'GST';
+      apiDocType = 'GST_CERTIFICATE';
+    } else if (rawType.includes('CHEQUE')) {
+      apiDocType = 'CANCELLED_CHEQUE';
+    } else if (rawType.includes('TRADE')) {
+      apiDocType = 'TRADE_LICENSE';
+    } else if (rawType.includes('FSSAI')) {
+      apiDocType = 'FSSAI_LICENSE';
     } else {
-      apiDocType = 'PAN';
+      apiDocType = 'PAN_CARD';
     }
 
     let uploadFile = file;

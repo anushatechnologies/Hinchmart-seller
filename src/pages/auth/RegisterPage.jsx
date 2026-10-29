@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   User,
@@ -992,7 +992,7 @@ export function RegisterPage() {
                     }}
                     className={`py-2 px-1 sm:px-2 rounded-xl transition-all cursor-pointer disabled:cursor-not-allowed ${
                       isActive
-                        ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/20 font-black'
+                        ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-slate-950 shadow-md shadow-amber-500/25 font-black'
                         : isCompleted
                         ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                         : 'bg-slate-50 text-slate-400 border border-slate-200'
@@ -1323,7 +1323,7 @@ export function RegisterPage() {
                 <button
                   type="submit"
                   disabled={stepLoading === 1}
-                  className="py-2.5 px-6 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md shadow-emerald-600/20 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-70"
+                  className="py-2.5 px-6 bg-gradient-to-r from-amber-500 via-amber-600 to-amber-500 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-md shadow-amber-500/25 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-70"
                 >
                   {stepLoading === 1 ? (
                     <>
@@ -1518,7 +1518,7 @@ export function RegisterPage() {
                 <button
                   type="submit"
                   disabled={stepLoading === 2}
-                  className="py-2.5 px-6 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md shadow-emerald-600/20 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-70"
+                  className="py-2.5 px-6 bg-gradient-to-r from-amber-500 via-amber-600 to-amber-500 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-md shadow-amber-500/25 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-70"
                 >
                   {stepLoading === 2 ? (
                     <>
@@ -1690,7 +1690,7 @@ export function RegisterPage() {
                 <button
                   type="submit"
                   disabled={stepLoading === 3}
-                  className="py-2.5 px-6 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md shadow-emerald-600/20 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-70"
+                  className="py-2.5 px-6 bg-gradient-to-r from-amber-500 via-amber-600 to-amber-500 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-md shadow-amber-500/25 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-70"
                 >
                   {stepLoading === 3 ? (
                     <>
@@ -1879,7 +1879,7 @@ export function RegisterPage() {
                   type="button"
                   onClick={handleFinalSubmit}
                   disabled={isLoading || stepLoading === 4}
-                  className="w-full sm:w-2/3 py-3 px-4 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md shadow-emerald-600/20 hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70"
+                  className="w-full sm:w-2/3 py-3 px-4 bg-gradient-to-r from-amber-500 via-amber-600 to-amber-500 hover:from-amber-600 hover:to-amber-700 text-slate-950 font-black text-xs sm:text-sm rounded-xl shadow-md shadow-amber-500/25 hover:shadow-lg transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70"
                 >
                   {isLoading || stepLoading === 4 ? (
                     <>

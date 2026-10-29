@@ -145,9 +145,10 @@ export const inventoryService = {
       try {
         await apiClient.post('/api/seller/inventory/adjust', {
           productId: Number(productId) || productId,
+          warehouseId: Number(adjustment?.warehouseId) || 1,
+          adjustmentType: adjustment?.adjustmentType || (adjustType === 'replace' ? 'set' : adjustType),
           quantity: qty,
-          type: adjustType,
-          warehouseId: adjustment?.warehouseId || undefined,
+          reason: reason,
         });
       } catch (apiErr) {
         // Fallback gracefully

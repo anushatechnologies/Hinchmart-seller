@@ -1,5 +1,6 @@
 import {
   apiClient,
+  sellerApi,
   API_BASE_URL,
   USE_MOCK_API,
   hasValidLiveAuth,
@@ -13,6 +14,7 @@ import {
 
 export {
   apiClient,
+  sellerApi,
   API_BASE_URL,
   USE_MOCK_API,
   hasValidLiveAuth,
